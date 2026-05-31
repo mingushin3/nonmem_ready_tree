@@ -40,3 +40,76 @@ def test_family_introduces_no_q_edge():
     assert CUNITS["c0341"]["can_route_to_q"] == []
     vv = CUNITS["c0340"].get("verify_visualization") or {}
     assert vv.get("fail_route_to") is None
+
+
+# ===== Phase 5 · Slice 2 — TIME family skeleton (D-S3/D-S4) =====
+
+TIME_MESS = ["c0310", "c0311", "c0314", "c0315"]
+TIME_STRANDS = [s for s in STRANDS if any(c in s["c_sequence"] for c in TIME_MESS)]
+TIME_Q = [s for s in STRANDS if s.get("q_code") in ("Q02", "Q12")]
+
+
+def test_time_mess_precedes_backbone():
+    """D-S3: TIME mess c(L-4->L-5)는 모든 TIME strand에서 backbone(비 L-4->L-5)보다 앞에 온다."""
+    for s in TIME_STRANDS:
+        seq = s["c_sequence"]
+        mess_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] == "L-4->L-5"]
+        backbone_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] != "L-4->L-5"]
+        assert mess_idx, s["sc_id"]
+        if backbone_idx:
+            assert max(mess_idx) < min(backbone_idx), s["sc_id"]
+
+
+def test_time_c_layer_assignment():
+    """TIME mess(c0310/c0311/c0314/c0315)=L-4->L-5; 축(c0203/c0213/c0251)=L-3->L-4."""
+    for c in TIME_MESS:
+        assert CUNITS[c]["layer_pair"] == "L-4->L-5", c
+    for c in ["c0203", "c0213", "c0251"]:
+        assert CUNITS[c]["layer_pair"] == "L-3->L-4", c
+
+
+def test_time_q_terminals_not_isolated():
+    """★ D-S4(슬라이스1의 역): c0251.can_route_to_q=[Q02,Q12], 둘 다 ≥1 strand로 도달·c0251로 종착 → 고립 Q-terminal 0."""
+    assert CUNITS["c0251"]["can_route_to_q"] == ["Q02", "Q12"]
+    reached = {s["q_code"] for s in TIME_Q}
+    assert {"Q02", "Q12"} <= reached
+    assert all(s["c_sequence"][-1] == "c0251" for s in TIME_Q)
+
+
+def test_time_convert_q_edge_targets_reachable():
+    """D-S4 조기보증: c0311/c0315 can_route_to_q=[Q02] 타깃 Q02 도달가능(Phase 7 conditional-edge 고립 방지)."""
+    for c in ["c0311", "c0315"]:
+        assert CUNITS[c]["can_route_to_q"] == ["Q02"]
+    assert any(s.get("q_code") == "Q02" for s in STRANDS)
+
+
+# ===== Phase 5 · Slice 3 — TIMEZONE family skeleton (D-S3/D-S4) =====
+
+TZ_MESS = ["c0312", "c0313"]
+TZ_STRANDS = [s for s in STRANDS if "c0313" in s["c_sequence"]]
+
+
+def test_timezone_mess_precedes_backbone():
+    """D-S3: 모든 532 strand에서 마지막 L-4->L-5 c index < 첫 비-L-4->L-5(backbone) c index."""
+    for s in TZ_STRANDS:
+        seq = s["c_sequence"]
+        mess_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] == "L-4->L-5"]
+        backbone_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] != "L-4->L-5"]
+        assert mess_idx, s["sc_id"]
+        if backbone_idx:
+            assert max(mess_idx) < min(backbone_idx), s["sc_id"]
+
+
+def test_timezone_c_layer_assignment():
+    """c0312/c0313은 L-4->L-5 (mess normalization 전처리 stage)."""
+    for c in TZ_MESS:
+        assert CUNITS[c]["layer_pair"] == "L-4->L-5", c
+
+
+def test_timezone_family_introduces_no_q_edge():
+    """D-S4: TIMEZONE family는 Q-code 트리거 없음(can_route_to_q=[]) → 고립 Q-terminal 무기여."""
+    assert CUNITS["c0312"]["can_route_to_q"] == []
+    assert CUNITS["c0313"]["can_route_to_q"] == []
+    vv = CUNITS["c0312"].get("verify_visualization") or {}
+    assert vv.get("fail_route_to") is None
+    assert CUNITS["c0313"].get("verify_visualization") is None

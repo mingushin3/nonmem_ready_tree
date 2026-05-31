@@ -35,6 +35,14 @@ from src.c_units.c0209_verify_cross_column_invariant import verify_cross_column_
 from src.c_units.c0210_detect_source_format import detect_source_format
 from src.c_units.c0340_detect_merged_cell import detect_merged_cell
 from src.c_units.c0341_propagate_merged_cell import propagate_merged_cell
+from src.c_units.c0213_verify_time_anchor import verify_time_anchor
+from src.c_units.c0251_route_time_format import route_time_format
+from src.c_units.c0310_detect_time_format import detect_time_format_mess
+from src.c_units.c0314_detect_time_anchor import detect_time_anchor
+from src.c_units.c0311_convert_time_format import convert_time_format
+from src.c_units.c0315_convert_time_anchor import convert_time_anchor
+from src.c_units.c0312_detect_timezone import detect_timezone
+from src.c_units.c0313_normalize_timezone import normalize_timezone
 
 
 class TestC0340Adversarial:
@@ -2240,3 +2248,305 @@ class TestC0121Adversarial:
         out = result["df"]
         assert list(out["WT"]) == [70, 68]
         assert list(out["visit"]) == ["V1", "V2"]
+
+
+# ===== Phase 5 · Slice 2 — TIME family adversarial =====
+
+class TestC0213Adversarial:
+    """c0213 adversarial traps: anchor 일관성 silent over/under-verify 차단."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=verify → df 변경 금지(SRP)."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0, 2.0]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        verify_time_anchor(df, {"time_anchor": ["Day 1", "Day 2"]})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_meta_consistent_is_written(self):
+        """meta['time_anchor_consistent'] side-effect 기록(bool)."""
+        meta = {"time_anchor": ["Day 1", "Day 2"]}
+        verify_time_anchor(pd.DataFrame({"time_value": [0.0]}), meta)
+        assert isinstance(meta.get("time_anchor_consistent"), bool)
+
+    def test_mixed_anchor_not_silent_pass(self):
+        """혼재 anchor(day/visit/date)를 'anchor 존재→일관'으로 silent pass 금지 → False, Q02."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0, 2.0]})
+        meta = {"time_anchor": ["Day 1", "Visit 2", "2024-01-15"]}
+        result = verify_time_anchor(df, meta)
+        assert result["time_anchor_consistent"] is False
+        assert result["pass"] is False
+        assert result["route_to_q"] == "Q02"
+
+    def test_declared_inconsistent_respected(self):
+        """외부 선언 time_anchor_consistent=False는 토큰이 일관적으로 보여도 존중 → Q02."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0]})
+        meta = {"time_anchor": ["Day 1", "Day 2"], "time_anchor_consistent": False}
+        result = verify_time_anchor(df, meta)
+        assert result["time_anchor_consistent"] is False
+        assert result["route_to_q"] == "Q02"
+
+    def test_no_anchor_no_fabricated_inconsistency(self):
+        """앵커 토큰 부재(time_value만) → 비일관 날조 금지: 기본 consistent=True, route None."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0, 2.0]})
+        result = verify_time_anchor(df, {})
+        assert result["time_anchor_consistent"] is True
+        assert result["route_to_q"] is None
+
+    def test_df_column_anchor_mixed_detected(self):
+        """meta 선언 없이 df 'time_anchor' 컬럼에서 혼재 감지(fallback 경로) → False, Q02."""
+        df = pd.DataFrame({
+            "time_value": [0.0, 1.0],
+            "time_anchor": ["Day 1", "Visit 1"],
+        })
+        result = verify_time_anchor(df, {})
+        assert result["time_anchor_consistent"] is False
+        assert result["route_to_q"] == "Q02"
+
+
+class TestC0251Adversarial:
+    """c0251 adversarial traps: A3 fail-state 라우팅 silent 오라우팅 차단."""
+
+    def test_ambiguous_routes_q02(self):
+        """AMBIGUOUS → Q02 (Q12/INVALID로 오라우팅 금지)."""
+        result = route_time_format(pd.DataFrame({"time_value": [0.0]}), {"a3_state": "AMBIGUOUS"})
+        assert result["routing_decision"] == "Q02"
+        assert result["q_code"] == "Q02"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_unrecoverable_routes_q12_not_invalid(self):
+        """★ snippet 산문('UNRECOVERABLE→INVALID') 무시: UNRECOVERABLE → Q12 (can_route_to_q·strands SSOT, GAP-7)."""
+        result = route_time_format(pd.DataFrame({"time_value": [0.0]}), {"a3_state": "UNRECOVERABLE"})
+        assert result["routing_decision"] == "Q12"
+        assert result["routing_decision"] != "INVALID"
+        assert result["q_code"] == "Q12"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_routing_decision_in_postcond_set(self):
+        """postcond: routing_decision ∈ {Q02,Q12,INVALID} (두 fail state 모두)."""
+        for state in ("AMBIGUOUS", "UNRECOVERABLE"):
+            result = route_time_format(pd.DataFrame({"time_value": [0.0]}), {"a3_state": state})
+            assert result["routing_decision"] in ["Q02", "Q12", "INVALID"]
+
+    def test_q_route_terminal_is_quarantine_not_auto(self):
+        """Q-route는 terminal=QUARANTINE — silent AUTO/None 종착 금지."""
+        result = route_time_format(pd.DataFrame({"time_value": [0.0]}), {"a3_state": "AMBIGUOUS"})
+        assert result["terminal"] == "QUARANTINE"
+        assert result["terminal"] not in (None, "AUTO")
+
+
+class TestC0310Adversarial:
+    """c0310 adversarial traps: 시간 형식 silent 오감지 차단."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP)."""
+        df = pd.DataFrame({"time_value": ["0:00", "1:30"]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_time_format_mess(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_meta_format_written_in_postcond_set(self):
+        """meta['time_format_detected'] 기록 + postcond 범위 ∈ 5형식."""
+        meta = {}
+        detect_time_format_mess(pd.DataFrame({"time_value": ["0:00"]}), meta)
+        assert meta.get("time_format_detected") in ["clock", "elapsed", "decimal", "datetime", "mixed"]
+
+    def test_mixed_not_silent_single(self):
+        """혼재(clock+datetime)를 첫값 기준 'clock'으로 silent 단정 금지 → 'mixed'."""
+        df = pd.DataFrame({"time_value": ["0:00", "2024-01-15"]})
+        result = detect_time_format_mess(df, {})
+        assert result["time_format_detected"] == "mixed"
+
+    def test_datetime_not_misread_as_decimal(self):
+        """ISO datetime을 decimal로 silent 오분류 금지 → 'datetime'."""
+        df = pd.DataFrame({"time_value": ["2024-01-15", "2024-01-16"]})
+        result = detect_time_format_mess(df, {})
+        assert result["time_format_detected"] == "datetime"
+
+    def test_declared_overrides_data(self):
+        """선언 meta['time_format']='elapsed'는 data 추정보다 우선."""
+        df = pd.DataFrame({"time_value": ["0:00", "1:30"]})
+        result = detect_time_format_mess(df, {"time_format": "elapsed"})
+        assert result["time_format_detected"] == "elapsed"
+
+
+class TestC0314Adversarial:
+    """c0314 adversarial traps: 시간 기준점 유형 silent 오감지·None 차단."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP)."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0], "time_anchor": ["Day 1", "Day 2"]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_time_anchor(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_anchor_type_never_none(self):
+        """postcond: time_anchor_type is not None — 앵커 부재여도 None 금지('none' 정직 표기)."""
+        result = detect_time_anchor(pd.DataFrame({"time_value": [0.0, 1.0]}), {})
+        assert result["time_anchor_type"] is not None
+        assert result["time_anchor_type"] == "none"
+
+    def test_mixed_anchor_detected(self):
+        """혼재 anchor(day+date)를 단일유형으로 silent 단정 금지 → 'mixed'."""
+        df = pd.DataFrame({"time_value": [0.0, 1.0], "time_anchor": ["Day 1", "2024-01-15"]})
+        result = detect_time_anchor(df, {})
+        assert result["time_anchor_type"] == "mixed"
+
+    def test_meta_anchor_tokens_priority(self):
+        """meta['time_anchor'] 선언 토큰 우선 사용(df 컬럼 없이도 분류)."""
+        result = detect_time_anchor(pd.DataFrame({"time_value": [0.0]}), {"time_anchor": ["Visit 1", "Visit 2"]})
+        assert result["time_anchor_type"] == "period-relative"
+
+
+class TestC0311Adversarial:
+    """c0311 adversarial traps: 시간 형식 변환 silent no-op·부분 NaN 차단."""
+
+    def test_input_df_not_mutated(self):
+        """transform은 df.copy() — 원본 time_value(문자열) 불변."""
+        df = pd.DataFrame({"time_value": ["0:00", "1:30"]})
+        convert_time_format(df, {"time_format_detected": "clock"})
+        assert list(df["time_value"]) == ["0:00", "1:30"]
+
+    def test_silent_noop_caught(self):
+        """clock 문자열 미변환(no-op) 금지 → 실제 numeric, postcond 충족."""
+        df = pd.DataFrame({"time_value": ["1:30", "2:00"]})
+        result = convert_time_format(df, {"time_format_detected": "clock"})
+        df_out = result["df"]
+        assert df_out["time_value"].apply(lambda x: isinstance(x, (int, float))).all()
+        assert list(df_out["time_value"]) == [1.5, 2.0]
+
+    def test_unparseable_clock_routes_q02_not_partial_nan(self):
+        """파싱 불가 토큰이 섞이면 부분 NaN을 silent 통과시키지 않고 fail/Q02."""
+        df = pd.DataFrame({"time_value": ["1:30", "garbage"]})
+        result = convert_time_format(df, {"time_format_detected": "clock"})
+        assert result["success"] is False
+        assert result["route_to_q"] == "Q02"
+
+    def test_mixed_format_routes_q02(self):
+        """mixed 형식은 결정적 변환 불가 → Q02(can_route_to_q), silent 통과 금지."""
+        df = pd.DataFrame({"time_value": ["0:00", "1.5"]})
+        result = convert_time_format(df, {"time_format_detected": "mixed"})
+        assert result["success"] is False
+        assert result["route_to_q"] == "Q02"
+
+    def test_datetime_to_elapsed_hours(self):
+        """datetime 형식 → 첫 시각 기준 elapsed hours numeric."""
+        df = pd.DataFrame({"time_value": ["2024-01-01 00:00", "2024-01-01 02:00"]})
+        result = convert_time_format(df, {"time_format_detected": "datetime"})
+        assert result["success"] is True
+        df_out = result["df"]
+        assert df_out["time_value"].apply(lambda x: isinstance(x, (int, float))).all()
+        assert list(df_out["time_value"]) == [0.0, 2.0]
+
+
+class TestC0315Adversarial:
+    """c0315 adversarial traps: 시간 기준점 파싱 vacuous no-op·부분 NaN 차단."""
+
+    def test_input_df_not_mutated(self):
+        """transform은 df.copy() — 원본에 time_anchor_parsed 누출 금지."""
+        df = pd.DataFrame({"time_value": [0, 1], "time_anchor": ["Day 1", "Day 2"]})
+        convert_time_anchor(df, {})
+        assert "time_anchor_parsed" not in df.columns
+
+    def test_vacuous_noop_caught(self):
+        """time_anchor 존재 시 parsed 컬럼 미생성(부재로 postcond vacuous 우회) 금지 → 생성·정확."""
+        df = pd.DataFrame({"time_value": [0, 1], "time_anchor": ["Day 1", "Day 2"]})
+        result = convert_time_anchor(df, {})
+        df_out = result["df"]
+        assert "time_anchor_parsed" in df_out.columns
+        assert list(df_out["time_anchor_parsed"]) == [0.0, 24.0]
+
+    def test_unparseable_anchor_routes_q02(self):
+        """비교 불가 토큰(절대날짜 등)이 섞여 부분 NaN이면 silent 통과 금지 → fail/Q02."""
+        df = pd.DataFrame({"time_value": [0, 1], "time_anchor": ["Day 1", "2024-01-15"]})
+        result = convert_time_anchor(df, {})
+        assert result["success"] is False
+        assert result["route_to_q"] == "Q02"
+
+
+class TestC0312Adversarial:
+    """c0312 adversarial traps: 시간대 불일치 silent 오감지·날조 차단."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP)."""
+        df = pd.DataFrame({"time_value": ["08:00 KST", "09:00 JST"]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_timezone(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_mixed_tz_not_silent_single(self):
+        """혼합 tz(KST+UTC)를 단일로 silent 단정 금지 → has_mixed_tz True, n_distinct_tz=2."""
+        df = pd.DataFrame({"time_value": ["08:00 KST", "00:00 UTC"]})
+        result = detect_timezone(df, {})
+        assert result["tz_issues"]["has_mixed_tz"] is True
+        assert result["tz_issues"]["n_distinct_tz"] == 2
+
+    def test_no_tz_token_not_invented(self):
+        """tz 토큰 부재(numeric time_value) → tz 날조 금지(has_mixed_tz False, tokens 빈)."""
+        df = pd.DataFrame({"time_value": [0.0, 1.5, 3.0]})
+        result = detect_timezone(df, {})
+        assert result["tz_issues"]["has_mixed_tz"] is False
+        assert result["tz_issues"]["tz_tokens"] == []
+
+    def test_unknown_token_not_counted_as_tz(self):
+        """known set 밖 토큰('XYZ')은 시간대로 오집계 금지(false positive 차단)."""
+        df = pd.DataFrame({"time_value": ["08:00 XYZ", "09:00 XYZ"]})
+        result = detect_timezone(df, {})
+        assert result["tz_issues"]["tz_tokens"] == []
+        assert result["tz_issues"]["has_mixed_tz"] is False
+
+    def test_postcond_tz_issues_is_dict(self):
+        """postcond: isinstance(meta.get('tz_issues'), dict) — 항상 dict 기록."""
+        meta = {}
+        detect_timezone(pd.DataFrame({"time_value": ["08:00 KST"]}), meta)
+        assert isinstance(meta.get("tz_issues"), dict)
+
+
+class TestC0313Adversarial:
+    """c0313 adversarial traps: 시간대 정규화 vacuous/silent no-op·부분변환 차단 (GAP-27)."""
+
+    def test_input_df_not_mutated(self):
+        """transform은 df.copy() — 원본 time_value(tz 토큰) 불변."""
+        df = pd.DataFrame({"time_value": ["09:00 KST", "00:00 UTC"]})
+        normalize_timezone(df, {"tz_issues": {"has_mixed_tz": True}, "tz_target": "UTC"})
+        assert list(df["time_value"]) == ["09:00 KST", "00:00 UTC"]
+
+    def test_silent_noop_caught(self):
+        """혼합 tz 미변환(flag만 set하는 no-op 포함) 금지 → 실제 단일 tz 통일 + 값 정확."""
+        df = pd.DataFrame({"time_value": ["09:00 KST", "00:00 UTC"]})
+        result = normalize_timezone(df, {"tz_issues": {"has_mixed_tz": True}, "tz_target": "UTC"})
+        df_out = result["df"]
+        assert {str(v).split()[-1] for v in df_out["time_value"]} == {"UTC"}
+        assert list(df_out["time_value"]) == ["00:00 UTC", "00:00 UTC"]
+
+    def test_vacuous_postcond_not_bypassed_when_detection_missing(self):
+        """★ GAP-27: tz_issues(c0312 산출) 부재 시 default-True postcond를 우회한 silent 통과 금지
+        → success=False, route_to_q=None(Q 날조 금지), flag 미설정."""
+        df = pd.DataFrame({"time_value": ["09:00 KST", "00:00 UTC"]})
+        meta = {}
+        result = normalize_timezone(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get("tz_normalized") is not True
+
+    def test_unparseable_time_with_tz_not_partial(self):
+        """tz 토큰 有 + 시각 파싱 불가가 섞이면 부분 변환을 silent 통과시키지 않고 fail."""
+        df = pd.DataFrame({"time_value": ["09:00 KST", "morning KST"]})
+        result = normalize_timezone(df, {"tz_issues": {"has_mixed_tz": False}, "tz_target": "UTC"})
+        assert result["success"] is False
+
+    def test_no_token_idempotent_but_flagged(self):
+        """tz 토큰 부재(정규화 대상 없음) → 값 보존하되 flag 명시 set(정당 idempotent, 부재≠silent)."""
+        df = pd.DataFrame({"time_value": [0.0, 1.5]})
+        meta = {"tz_issues": {"has_mixed_tz": False, "tz_tokens": [], "n_distinct_tz": 0}}
+        result = normalize_timezone(df, meta)
+        assert result["success"] is True
+        assert list(result["df"]["time_value"]) == [0.0, 1.5]
+        assert meta.get("tz_normalized") is True

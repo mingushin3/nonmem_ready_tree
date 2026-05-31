@@ -160,7 +160,7 @@ STATUS: PHASE_N_COMPLETE | NEEDS_USER_INPUT | BLOCKED
 3. **Coverage invariants:** C1 모든 c가 ≥1 strand OR Phase7 conditional-edge incoming ≥1 / C2 모든 edge traverse / C3 모든 Q-code trigger / C4 인접 c predicate implication / C5 actual_cost ≤ best_cost+ε.
 4. **Skeleton consistency (D-S3):** 모든 strand가 N0–N7 골격을 모순 없이 통과(tests/test_skeleton.py). 모든 c.can_route_to_q가 decision_tree conditional edge로 표현되고 고립 Q-terminal 0(D-S4).
 5. **Adversarial:** Phase 9 critical 0개 2 cycle 연속.
-6. **HTML:** Chrome 최신에서 초기 fit / c 클릭 split+4섹션 / downstream highlight / localStorage persist / 5000-node mock 10초 내 렌더 / bundle 클릭 시 member c 펼침(다발로 묶여도 c 가시성 보장).
+6. **HTML:** Chrome 최신에서 초기 fit / c 클릭 split+4섹션 / downstream highlight / localStorage persist / collapse-by-default 동시표시 노드 10초 내 렌더(5000 동시 dagre는 비요구·비실사용 worst-case, D-S3 경로표현; 근거: issues/provenance_gaps.md GAP-25) / bundle 클릭 시 member c 펼침(다발로 묶여도 c 가시성 보장).
 7. **UAT:** 사용자가 임의 3 sc 클릭 시연 후 "의도대로다" 확인.
 8. **No ambiguity:** spec/·CLAUDE.md·PROMPTS.md에 [AMBIGUOUS] 0개.
 

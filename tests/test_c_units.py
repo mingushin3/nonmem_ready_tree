@@ -35,6 +35,14 @@ from src.c_units.c0209_verify_cross_column_invariant import verify_cross_column_
 from src.c_units.c0210_detect_source_format import detect_source_format
 from src.c_units.c0340_detect_merged_cell import detect_merged_cell
 from src.c_units.c0341_propagate_merged_cell import propagate_merged_cell
+from src.c_units.c0213_verify_time_anchor import verify_time_anchor
+from src.c_units.c0251_route_time_format import route_time_format
+from src.c_units.c0310_detect_time_format import detect_time_format_mess
+from src.c_units.c0314_detect_time_anchor import detect_time_anchor
+from src.c_units.c0311_convert_time_format import convert_time_format
+from src.c_units.c0315_convert_time_anchor import convert_time_anchor
+from src.c_units.c0312_detect_timezone import detect_timezone
+from src.c_units.c0313_normalize_timezone import normalize_timezone
 
 
 class TestC0340:
@@ -3602,3 +3610,335 @@ class TestC0121:
         result = pivot_covariate_layout(df, meta)
         assert result["success"] == expected["success"]
         assert result["route_to_q"] == expected["route_to_q"]
+
+
+# ===== Phase 5 · Slice 2 — TIME family =====
+
+class TestC0213:
+    """c0213 — 시간 기준점 검증 (VERIFY TIME_ANCHOR)
+
+    postcondition_predicate:
+        meta.get('time_anchor_consistent', True)
+
+    srp_intent: VERIFY TIME_ANCHOR
+    kind: verify
+    requires_detection_by: null
+    can_route_to_q: ['Q02']
+    verify_visualization:
+        pass_route_to: c0203
+        fail_route_to: Q02
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """단일 유형 anchor('Day 1/2/3') → consistent=True, pass→c0203 (route None)."""
+        df, meta, expected = load_fixture_with_meta("c0213", "happy")
+        result = verify_time_anchor(df, meta)
+        assert result["time_anchor_consistent"] == expected["time_anchor_consistent"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('time_anchor_consistent', True)
+
+    def test_edge(self, load_fixture_with_meta):
+        """anchor 토큰 부재(time_value만) → 날조 없이 기본 consistent=True (scope-out)."""
+        df, meta, expected = load_fixture_with_meta("c0213", "edge")
+        result = verify_time_anchor(df, meta)
+        assert result["time_anchor_consistent"] == expected["time_anchor_consistent"]
+        assert result["pass"] == expected["pass"]
+        assert meta.get('time_anchor_consistent', True)
+
+    def test_trap(self, load_fixture_with_meta):
+        """혼재 anchor('Day 1'·'Visit 1'·절대날짜) → inconsistent=False, fail→Q02 (naive presence-pass 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0213", "trap")
+        result = verify_time_anchor(df, meta)
+        assert result["time_anchor_consistent"] is False
+        assert result["pass"] is False
+        assert result["route_to_q"] == "Q02"
+
+
+class TestC0251:
+    """c0251 — A3 실패 라우팅 (ROUTE TIME_FORMAT)
+
+    postcondition_predicate:
+        routing_decision in ['Q02', 'Q12', 'INVALID']
+
+    srp_intent: ROUTE TIME_FORMAT
+    kind: route
+    requires_detection_by: c0203
+    can_route_to_q: ['Q02', 'Q12']
+    매핑(SSOT strands.json + q_codes + GAP-7): AMBIGUOUS→Q02, UNRECOVERABLE→Q12.
+    (spec snippet 산문 'UNRECOVERABLE→INVALID'는 무시 — postcond Q12 허용 + 397 strand Q12.)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a3_state=AMBIGUOUS → Q02 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0251", "happy")
+        result = route_time_format(df, meta)
+        assert result["routing_decision"] in ['Q02', 'Q12', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """a3_state=UNRECOVERABLE → Q12 (snippet 'INVALID' 산문 무시; SSOT/GAP-7)."""
+        df, meta, expected = load_fixture_with_meta("c0251", "edge")
+        result = route_time_format(df, meta)
+        assert result["routing_decision"] in ['Q02', 'Q12', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ snippet-literal 차단: UNRECOVERABLE을 INVALID로 silent 라우팅 금지 → Q12 (can_route_to_q·strands SSOT)."""
+        df, meta, expected = load_fixture_with_meta("c0251", "trap")
+        result = route_time_format(df, meta)
+        assert result["routing_decision"] != "INVALID"
+        assert result["routing_decision"] == "Q12"
+        assert result["q_code"] == "Q12"
+
+
+class TestC0310:
+    """c0310 — 시간 형식 감지 (DETECT TIME_FORMAT)
+
+    postcondition_predicate:
+        meta.get('time_format_detected') in ['clock','elapsed','decimal','datetime','mixed']
+
+    srp_intent: DETECT TIME_FORMAT
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0311
+        fail_route_to: null
+    (함수명 detect_time_format_mess — c0203 detect_time_format(L-3->L-4 축)와 구분.)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """clock 표기([0:00,1:30,3:00]) → time_format_detected='clock', pass→c0311."""
+        df, meta, expected = load_fixture_with_meta("c0310", "happy")
+        result = detect_time_format_mess(df, meta)
+        assert result["time_format_detected"] == expected["time_format_detected"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('time_format_detected') in ['clock', 'elapsed', 'decimal', 'datetime', 'mixed']
+
+    def test_edge(self, load_fixture_with_meta):
+        """순수 numeric([0,1.5,3]) → 'decimal'."""
+        df, meta, expected = load_fixture_with_meta("c0310", "edge")
+        result = detect_time_format_mess(df, meta)
+        assert result["time_format_detected"] == expected["time_format_detected"]
+        assert meta.get('time_format_detected') in ['clock', 'elapsed', 'decimal', 'datetime', 'mixed']
+
+    def test_trap(self, load_fixture_with_meta):
+        """혼재(clock+decimal+datetime) → 'mixed' (naive 첫값-추정 'clock' silent 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0310", "trap")
+        result = detect_time_format_mess(df, meta)
+        assert result["time_format_detected"] == "mixed"
+        assert meta.get('time_format_detected') in ['clock', 'elapsed', 'decimal', 'datetime', 'mixed']
+
+
+class TestC0314:
+    """c0314 — 시간 기준점 감지 (DETECT TIME_ANCHOR)
+
+    postcondition_predicate:
+        meta.get('time_anchor_type') is not None
+
+    srp_intent: DETECT TIME_ANCHOR
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0315
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """단일 유형 anchor([Day 1,Day 2,Day 3]) → 'day-relative', pass→c0315."""
+        df, meta, expected = load_fixture_with_meta("c0314", "happy")
+        result = detect_time_anchor(df, meta)
+        assert result["time_anchor_type"] == expected["time_anchor_type"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('time_anchor_type') is not None
+
+    def test_edge(self, load_fixture_with_meta):
+        """anchor 토큰 부재 → 'none'(None 아님; postcond 충족, 날조 없이 부재 표기)."""
+        df, meta, expected = load_fixture_with_meta("c0314", "edge")
+        result = detect_time_anchor(df, meta)
+        assert result["time_anchor_type"] == expected["time_anchor_type"]
+        assert meta.get('time_anchor_type') is not None
+
+    def test_trap(self, load_fixture_with_meta):
+        """혼재 anchor([Day 1,Day 2,절대날짜]) → 'mixed' (단일유형 silent 오판 차단); 절대 None 금지."""
+        df, meta, expected = load_fixture_with_meta("c0314", "trap")
+        result = detect_time_anchor(df, meta)
+        assert result["time_anchor_type"] == "mixed"
+        assert meta.get('time_anchor_type') is not None
+
+
+class TestC0311:
+    """c0311 — 시간 형식 변환 (CONVERT TIME_FORMAT)
+
+    postcondition_predicate:
+        df['time_value'].apply(lambda x: isinstance(x, (int, float))).all()
+
+    srp_intent: CONVERT TIME_FORMAT
+    kind: transform
+    requires_detection_by: c0310
+    can_route_to_q: ['Q02']
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """clock [0:00,1:30,3:00] → numeric [0.0,1.5,3.0] (elapsed hours)."""
+        df, meta, expected = load_fixture_with_meta("c0311", "happy")
+        result = convert_time_format(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert df_out['time_value'].apply(lambda x: isinstance(x, (int, float))).all()
+        assert list(df_out["time_value"]) == expected["time_value"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """이미 numeric(decimal) → 통과(idempotent), 값 보존."""
+        df, meta, expected = load_fixture_with_meta("c0311", "edge")
+        result = convert_time_format(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert df_out['time_value'].apply(lambda x: isinstance(x, (int, float))).all()
+        assert list(df_out["time_value"]) == expected["time_value"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """silent no-op 차단: clock 문자열이 실제 numeric으로 변환(미변환 시 postcond 위반·문자열 잔존)."""
+        df, meta, expected = load_fixture_with_meta("c0311", "trap")
+        result = convert_time_format(df, meta)
+        df_out = result["df"]
+        assert df_out['time_value'].apply(lambda x: isinstance(x, (int, float))).all()
+        assert not any(isinstance(x, str) for x in df_out["time_value"])
+        assert list(df_out["time_value"]) == expected["time_value"]
+
+
+class TestC0315:
+    """c0315 — 시간 기준점 파싱 (CONVERT TIME_ANCHOR)
+
+    postcondition_predicate:
+        df.get('time_anchor_parsed', pd.Series()).notna().all() if 'time_anchor_parsed' in df.columns else True
+
+    srp_intent: CONVERT TIME_ANCHOR
+    kind: transform
+    requires_detection_by: c0314
+    can_route_to_q: ['Q02']
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """anchor [Day 1,Day 2,Day 3] → time_anchor_parsed [0,24,48] hours."""
+        df, meta, expected = load_fixture_with_meta("c0315", "happy")
+        result = convert_time_anchor(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert df_out.get('time_anchor_parsed', pd.Series()).notna().all() if 'time_anchor_parsed' in df_out.columns else True
+        assert list(df_out["time_anchor_parsed"]) == expected["time_anchor_parsed"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """time_anchor 컬럼 부재 → 변환 대상 없음, postcond vacuous True, success."""
+        df, meta, expected = load_fixture_with_meta("c0315", "edge")
+        result = convert_time_anchor(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert df_out.get('time_anchor_parsed', pd.Series()).notna().all() if 'time_anchor_parsed' in df_out.columns else True
+
+    def test_trap(self, load_fixture_with_meta):
+        """vacuous no-op 차단: time_anchor 존재 시 time_anchor_parsed가 실제 생성·정확(부재로 postcond 우회 금지)."""
+        df, meta, expected = load_fixture_with_meta("c0315", "trap")
+        result = convert_time_anchor(df, meta)
+        df_out = result["df"]
+        assert "time_anchor_parsed" in df_out.columns
+        assert list(df_out["time_anchor_parsed"]) == expected["time_anchor_parsed"]
+
+
+class TestC0312:
+    """c0312 — 시간대 감지 (DETECT TIMEZONE)
+
+    postcondition_predicate:
+        isinstance(meta.get('tz_issues'), dict)
+
+    srp_intent: DETECT TIMEZONE
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0313
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """혼합 시간대([00:00 UTC, 09:00 KST]) → tz_issues.has_mixed_tz=True, pass→c0313."""
+        df, meta, expected = load_fixture_with_meta("c0312", "happy")
+        result = detect_timezone(df, meta)
+        assert result["tz_issues"] == expected["tz_issues"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('tz_issues'), dict)
+
+    def test_edge(self, load_fixture_with_meta):
+        """단일 시간대([08:00 KST, 09:00 KST]) → has_mixed_tz=False (불일치 없음 정직 표기)."""
+        df, meta, expected = load_fixture_with_meta("c0312", "edge")
+        result = detect_timezone(df, meta)
+        assert result["tz_issues"] == expected["tz_issues"]
+        assert isinstance(meta.get('tz_issues'), dict)
+
+    def test_trap(self, load_fixture_with_meta):
+        """3종 혼재([KST, JST, UTC]) → n_distinct_tz=3 (naive '모두 동일' silent 오판 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0312", "trap")
+        result = detect_timezone(df, meta)
+        assert result["tz_issues"]["has_mixed_tz"] is True
+        assert result["tz_issues"]["n_distinct_tz"] == 3
+        assert isinstance(meta.get('tz_issues'), dict)
+
+
+class TestC0313:
+    """c0313 — 시간대 정규화 (NORMALIZE TIMEZONE)
+
+    postcondition_predicate:
+        meta.get('tz_normalized', True)
+
+    srp_intent: NORMALIZE TIMEZONE
+    kind: transform
+    requires_detection_by: c0312
+    can_route_to_q: []
+    (★ postcond는 default=True라 no-op도 vacuously 통과 — GAP-27. trap/missing-detection test가
+     실제 정규화·flag 명시 설정·비-silent failure를 강제한다. c0315 vacuous-postcond 선례 동형.)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """혼합 tz [00:00 UTC, 09:00 KST] → 단일 target UTC [00:00 UTC, 00:00 UTC]."""
+        df, meta, expected = load_fixture_with_meta("c0313", "happy")
+        result = normalize_timezone(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert list(df_out["time_value"]) == expected["time_value"]
+        assert meta.get('tz_normalized', True)
+
+    def test_edge(self, load_fixture_with_meta):
+        """단일 tz(KST) → idempotent 통과, 값 보존."""
+        df, meta, expected = load_fixture_with_meta("c0313", "edge")
+        result = normalize_timezone(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert list(df_out["time_value"]) == expected["time_value"]
+        assert meta.get('tz_normalized', True)
+
+    def test_trap(self, load_fixture_with_meta):
+        """vacuous/silent no-op 차단: 혼합 tz가 실제 단일 tz로 변환 + flag 명시 설정(미변환 시 잔존 tz·flag 미설정)."""
+        df, meta, expected = load_fixture_with_meta("c0313", "trap")
+        result = normalize_timezone(df, meta)
+        df_out = result["df"]
+        assert list(df_out["time_value"]) == expected["time_value"]
+        assert {str(v).split()[-1] for v in df_out["time_value"]} == {"UTC"}
+        assert meta.get('tz_normalized') is True   # default(True)가 아닌 명시 설정 확인
+
+    def test_tz_issues_missing_not_silent_noop(self):
+        """★ GAP-27/GAP-21(C): detection(c0312) 산출물 meta['tz_issues'] 부재 시 silent 통과 금지 —
+        success=False·route_to_q=None(Q 날조 금지)·flag 미설정(vacuous postcond에 의존하지 않음)."""
+        df = pd.DataFrame({"time_value": ["08:00 KST", "09:00 JST"]})
+        meta = {}
+        result = normalize_timezone(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get('tz_normalized') is not True
