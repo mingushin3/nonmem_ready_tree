@@ -47,6 +47,9 @@ from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
 from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
 from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
 from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
+from src.c_units.c0305_detect_blq_token import detect_blq_token_mess
+from src.c_units.c0306_normalize_blq_token import normalize_blq_token
+from src.c_units.c0253_route_blq_token import route_blq_token
 
 
 class TestC0340Adversarial:
@@ -2738,3 +2741,120 @@ class TestC0393Adversarial:
         meta = {"has_placebo": True}
         classify_placebo_subject(pd.DataFrame({"subject_id": [2], "dose_amount": [0]}), meta)
         assert isinstance(meta.get("placebo_subjects"), list)
+
+
+class TestC0305Adversarial:
+    """c0305 adversarial traps: BLQ 토큰 변종 silent-miss·날조 차단 (vacuous postcond 보강)."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP). meta만 기록."""
+        df = pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ"]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_blq_token_mess(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_real_variants_not_silent_empty(self):
+        """실재 BLQ 변종([<0.1,BLQ,ND]) → blq_variants_found 비어있지 않음(silent [] vacuous 차단)."""
+        df = pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ", "ND", "3.1"]})
+        result = detect_blq_token_mess(df, {})
+        assert result["blq_variants_found"]  # non-empty
+        assert set(result["blq_variants_found"]) == {"<0.1", "BLQ", "ND"}
+
+    def test_no_blq_empty_list_legit(self):
+        """순수 numeric → blq_variants_found=[] 정당한 빈 감지(날조 금지)."""
+        df = pd.DataFrame({"dv_value": ["5.2", "3.1", "1.0"]})
+        result = detect_blq_token_mess(df, {})
+        assert result["blq_variants_found"] == []
+
+    def test_korean_token_detected(self):
+        """한글 '이하'(LLOQ 이하 표기)도 BLQ 변종으로 감지(어휘 누락 차단)."""
+        df = pd.DataFrame({"dv_value": ["5.2", "정량한계 이하"]})
+        result = detect_blq_token_mess(df, {})
+        assert "정량한계 이하" in result["blq_variants_found"]
+
+    def test_postcond_blq_variants_is_list(self):
+        """postcond: isinstance(meta.get('blq_variants_found'), list) — 부재여도 list."""
+        meta = {}
+        detect_blq_token_mess(pd.DataFrame({"dv_value": ["5.2"]}), meta)
+        assert isinstance(meta.get("blq_variants_found"), list)
+
+
+class TestC0306Adversarial:
+    """c0306 adversarial traps: BLQ 정규화 silent no-op + cross-layer 산출 컬럼 누락 차단 (GAP-15)."""
+
+    def test_input_df_not_mutated(self):
+        """transform은 df.copy() — 원본 dv_value(토큰 문자열) 불변."""
+        df = pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ"]})
+        normalize_blq_token(df, {})
+        assert list(df["dv_value"]) == ["5.2", "<0.1", "BLQ"]
+
+    def test_silent_noop_caught(self):
+        """토큰 미제거(no-op) 금지 → postcond(토큰 잔존 0) 충족 (verbatim postcond)."""
+        df = pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ", "ND"]})
+        result = normalize_blq_token(df, {})
+        df_out = result["df"]
+        assert not df_out["dv_value"].astype(str).str.contains(r"<|BLQ|ND|LOD|이하", case=False, na=False).any()
+
+    def test_blq_detected_column_produced(self):
+        """cross-layer 계약(GAP-15): blq_detected가 BLQ 행을 정확히 표식(c0020 ASSIGN BLQ_FLAG 입력)."""
+        df = pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ 0.05", "3.1"]})
+        result = normalize_blq_token(df, {})
+        df_out = result["df"]
+        assert "blq_detected" in df_out.columns
+        assert list(df_out["blq_detected"]) == [False, True, True, False]
+
+    def test_lloq_value_extracted(self):
+        """cross-layer 계약(GAP-15): lloq_value가 토큰서 numeric 추출(c0021 ASSIGN LLOQ 입력). <0.1→0.1."""
+        df = pd.DataFrame({"dv_value": ["<0.1", "<0.05"]})
+        result = normalize_blq_token(df, {})
+        df_out = result["df"]
+        assert "lloq_value" in df_out.columns
+        assert df_out["lloq_value"].tolist() == [0.1, 0.05]
+
+    def test_no_blq_vacuous_pass_no_token_invented(self):
+        """순수 numeric → 토큰 날조 금지, blq_detected 전부 False, dv 불변."""
+        df = pd.DataFrame({"dv_value": [5.2, 3.1, 1.0]})
+        result = normalize_blq_token(df, {})
+        df_out = result["df"]
+        assert list(df_out["blq_detected"]) == [False, False, False]
+        assert list(df_out["dv_value"]) == [5.2, 3.1, 1.0]
+
+
+class TestC0253Adversarial:
+    """c0253 adversarial traps: A5 fail-state 라우팅 silent 오라우팅 차단 (Q01/Q15D/INVALID)."""
+
+    def test_blq_no_policy_routes_q01(self):
+        """BLQ-NO-POLICY → Q01 (Q15D/INVALID로 오라우팅 금지)."""
+        result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": "BLQ-NO-POLICY"})
+        assert result["routing_decision"] == "Q01"
+        assert result["q_code"] == "Q01"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_all_four_q01_states(self):
+        """★ 불완전 매핑 차단: Q01 4-state 전부 Q01(BLQ-NO-POLICY만 매핑하고 나머지 누락 금지)."""
+        for st in ("BLQ-NO-POLICY", "LLOQ-MISSING", "ABOVE-ULOQ-NO-POLICY", "REPLICATE-NO-POLICY"):
+            result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": st})
+            assert result["routing_decision"] == "Q01", st
+
+    def test_bioanalytical_routes_q15d_not_q01(self):
+        """BIOANALYTICAL-FINAL-FLAG-MISSING → Q15D (Q01로 silent 합치기 금지; SSOT 89 strand)."""
+        result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": "BIOANALYTICAL-FINAL-FLAG-MISSING"})
+        assert result["routing_decision"] == "Q15D"
+        assert result["q_code"] == "Q15D"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_absent_routes_invalid_not_q01(self):
+        """ABSENT → INVALID(q_code=None) (Q01로 silent 승격 금지; SSOT 111 strand, GAP-8)."""
+        result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": "ABSENT"})
+        assert result["routing_decision"] == "INVALID"
+        assert result["q_code"] is None
+        assert result["terminal"] == "INVALID"
+
+    def test_routing_decision_in_postcond_set(self):
+        """postcond: routing_decision ∈ {Q01,Q15D,INVALID} (전 precond fail state)."""
+        for st in ("BLQ-NO-POLICY", "LLOQ-MISSING", "ABOVE-ULOQ-NO-POLICY", "REPLICATE-NO-POLICY",
+                   "BIOANALYTICAL-FINAL-FLAG-MISSING", "ABSENT"):
+            result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": st})
+            assert result["routing_decision"] in ["Q01", "Q15D", "INVALID"]

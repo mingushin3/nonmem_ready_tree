@@ -179,3 +179,48 @@ def test_placebo_family_introduces_no_q_edge():
     assert vv.get("fail_route_to") is None
     assert vv.get("pass_route_to") == "c0393"
     assert CUNITS["c0393"].get("verify_visualization") is None
+
+
+# ===== Phase 5 · Slice 6 — BLQ_TOKEN family skeleton (D-S3/D-S4) =====
+
+BLQ_MESS_C = ["c0305", "c0306"]
+BLQ_STRANDS = [s for s in STRANDS if "c0306" in s["c_sequence"]]
+BLQ_Q01 = [s for s in STRANDS if s.get("q_code") == "Q01"]
+
+
+def test_blq_mess_precedes_backbone():
+    """D-S3: BLQ mess c(c0305/c0306, L-4->L-5)는 모든 BLQ strand에서 backbone(비 L-4->L-5)보다 앞에 온다."""
+    for s in BLQ_STRANDS:
+        seq = s["c_sequence"]
+        mess_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] == "L-4->L-5"]
+        backbone_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] != "L-4->L-5"]
+        assert mess_idx, s["sc_id"]
+        if backbone_idx:
+            assert max(mess_idx) < min(backbone_idx), s["sc_id"]
+
+
+def test_blq_c_layer_assignment():
+    """BLQ mess(c0305/c0306)=L-4->L-5; A5 축(c0205/c0253)=L-3->L-4; assign(c0020/c0021)=L-1->L-2."""
+    for c in BLQ_MESS_C:
+        assert CUNITS[c]["layer_pair"] == "L-4->L-5", c
+    for c in ["c0205", "c0253"]:
+        assert CUNITS[c]["layer_pair"] == "L-3->L-4", c
+    for c in ["c0020", "c0021"]:
+        assert CUNITS[c]["layer_pair"] == "L-1->L-2", c
+
+
+def test_blq_q_terminals_not_isolated():
+    """★ D-S4: Q01 라우터는 c0253(ROUTE), c0253.can_route_to_q=[Q01]. Q01이 ≥1 strand로 도달·c0253로 종착
+    → 고립 Q-terminal 0. (c0306.can_route_to_q=[Q01]은 D-S4 *선언*이지 strand 라우터 아님 — GAP-28.)"""
+    assert CUNITS["c0253"]["can_route_to_q"] == ["Q01"]
+    assert CUNITS["c0306"]["can_route_to_q"] == ["Q01"]  # D-S4 선언(runtime 라우터 아님)
+    assert BLQ_Q01
+    assert {s["q_code"] for s in BLQ_Q01} == {"Q01"}
+    assert all(s["c_sequence"][-1] == "c0253" for s in BLQ_Q01)
+
+
+def test_blq_route_q_targets_reachable():
+    """D-S4 조기보증: c0253이 실제 도달시키는 Q01/Q15D 타깃이 strand에 존재(Phase 7 conditional-edge 고립 방지).
+    c0253 실제 라우팅 {Q01,Q15D,INVALID} ⊋ can_route_to_q=[Q01] — Q15D/INVALID는 D-S4 재구성(GAP-28)."""
+    assert any(s.get("q_code") == "Q01" for s in STRANDS)
+    assert any(s.get("q_code") == "Q15D" and s["c_sequence"][-1] == "c0253" for s in STRANDS)

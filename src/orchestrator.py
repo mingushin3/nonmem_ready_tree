@@ -7,6 +7,9 @@ slice 1 = MERGED_CELL(c0340/c0341). slice 2 = TIME family(축 detect c0203 + ver
 + ROUTE c0251 + 하류 mess c0310/c0311/c0314/c0315). slice 3 = TIMEZONE(c0312/c0313, TIME mess
 블록 마무리; can_route_to_q=[] → no Q). slice 4 = COVARIATE_LAYOUT(c0380/c0381 + 기구현 c0121 PIVOT
 활성화, GAP-16 종결). slice 5 = PLACEBO_SUBJECT(c0392/c0393, 자기완결·하류 transform 없음; no Q).
+slice 6 = BLQ_TOKEN(mess detect+normalize c0305/c0306 + A5 axis c0205 + ROUTE c0253→Q01/Q15D/INVALID;
+GAP-15 종결: c0306 산출 blq_detected/lloq_value가 기구현 c0020/c0021을 cross-layer 활성화). ★ Q01 strand
+라우팅 실주체=c0253(c0306 아님; c0306.can_route_to_q=[Q01]은 Phase 7 D-S4 선언, GAP-28/GAP-26 동형).
 
 D-S1 (detection-mandatory): transform·route c의 requires_detection_by가 가리키는 DETECT/VERIFY c가
 먼저 실행(meta에 '{req}_ran' 기록)되지 않으면 dispatch가 거부한다(cut-vertex). 즉 runtime은
@@ -48,6 +51,46 @@ from src.c_units.c0121_pivot_covariate_layout import pivot_covariate_layout
 # slice 5: PLACEBO_SUBJECT mess(L-4->L-5 detect+classify) — 자기완결(하류 transform·활성화 없음)
 from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
 from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
+# slice 6: BLQ_TOKEN mess(detect+normalize) + A5 axis(c0205) + ROUTE→Q01(c0253) + GAP-15 활성화(c0020/c0021)
+from src.c_units.c0305_detect_blq_token import detect_blq_token_mess
+from src.c_units.c0306_normalize_blq_token import normalize_blq_token
+from src.c_units.c0205_detect_blq_token import detect_blq_token
+from src.c_units.c0253_route_blq_token import route_blq_token
+from src.c_units.c0020_assign_blq_flag import assign_blq_flag
+from src.c_units.c0021_assign_lloq import assign_lloq
+# slice 7a — backbone activation (순수 배선, 신규 c 0): 기구현·미배선 backbone 23c를 REGISTRY에 배선.
+#   axis A0–A10(c0200–c0210; c0203/c0205/c0207은 기배선) + L-1→L-2 NONMEM 컬럼(c0001/c0010–c0019)
+#   + covariate(c0022/c0023 L-1→L-2, c0140/c0141 L-2→L-3). dispatch/run_strand 로직 무변경.
+#   ★ GAP-29 RESOLVED(slice 7b): c0001/c0010/c0011/c0012/c0014/c0016/c0017/c0018에 meta=None 기본인자를
+#     추가(본문 무변경)해 fn(df,meta) 호출규약과 정합. 8c는 meta를 read하지 않아(cite-verify) meta=None으로
+#     충분 — 후방호환(fn(df) 단위테스트 green) 유지. 측정: tests/test_integration_slice7b.py.
+# axis A0–A10 (kind verify/detect, reqdet=None — D-S1 gate 비대상)
+from src.c_units.c0200_verify_a0_analysis_intent import verify_a0_analysis_intent
+from src.c_units.c0201_detect_sheet_inventory import detect_sheet_inventory
+from src.c_units.c0202_classify_regimen_descriptor import classify_regimen_descriptor
+from src.c_units.c0204_verify_amt import verify_amt
+from src.c_units.c0206_classify_row_ordering import classify_row_ordering
+from src.c_units.c0208_classify_analyte_column import classify_analyte_column
+from src.c_units.c0209_verify_cross_column_invariant import verify_cross_column_invariant
+from src.c_units.c0210_detect_source_format import detect_source_format
+# L-1→L-2 NONMEM 컬럼 부여 (전부 (df,meta) 정합; 8c는 GAP-29 RESOLVED로 meta=None 정규화 — slice 7b)
+from src.c_units.c0001_verify_column_schema import verify_column_schema
+from src.c_units.c0010_assign_evid import assign_evid
+from src.c_units.c0011_assign_mdv import assign_mdv
+from src.c_units.c0012_assign_amt import assign_amt
+from src.c_units.c0013_assign_cmt import assign_cmt
+from src.c_units.c0014_assign_rate import assign_rate
+from src.c_units.c0015_assign_addl import assign_addl
+from src.c_units.c0016_assign_ii import assign_ii
+from src.c_units.c0017_assign_dv import assign_dv
+from src.c_units.c0018_assign_id import assign_id
+from src.c_units.c0019_assign_time import assign_time
+# covariate 부여 — c0022/c0140은 assign_baseline_covariate, c0023/c0141은 assign_time_varying_covariate
+#   동명 함수 충돌 → c_id alias.
+from src.c_units.c0022_assign_baseline_covariate import assign_baseline_covariate as assign_baseline_covariate_c0022
+from src.c_units.c0023_assign_time_varying_covariate import assign_time_varying_covariate as assign_time_varying_covariate_c0023
+from src.c_units.c0140_assign_baseline_covariate import assign_baseline_covariate as assign_baseline_covariate_c0140
+from src.c_units.c0141_assign_time_varying_covariate import assign_time_varying_covariate as assign_time_varying_covariate_c0141
 
 _CUNITS_PATH = PROJECT_ROOT / "spec" / "c_units.json"
 _CUNITS = json.loads(_CUNITS_PATH.read_text(encoding="utf-8"))
@@ -83,6 +126,46 @@ REGISTRY = {
     # gate는 transform/route 대상) — c0392 의존(has_placebo)은 impl artifact-guard(GAP-27 동형, c0381 선례).
     "c0392": ("detect", detect_placebo_subject),
     "c0393": ("detect", classify_placebo_subject),
+    # slice 6 — BLQ_TOKEN: mess detect+normalize(c0305/c0306) + A5 axis(c0205, 기구현) + ROUTE→Q01(c0253).
+    #   ★ Q01 strand 라우팅 실주체 = c0253(ROUTE, 645 last-c: Q01 445/Q15D 89/INVALID 111). c0306은
+    #   transform이고 can_route_to_q=[Q01]은 Phase 7 D-S4 선언(GAP-28, slice 2 GAP-26 동형).
+    #   ★ GAP-15 종결: c0306 산출(blq_detected/lloq_value)이 기구현 c0020/c0021을 cross-layer 활성화
+    #   (c0205 axis gate 경유; blq_policy는 외부입력=통합 시 주입, 잔여 by-design).
+    "c0305": ("detect", detect_blq_token_mess),       # mess DETECT (verify_visualization pass→c0306)
+    "c0306": ("transform", normalize_blq_token),      # D-S1 gate: c0305_ran
+    "c0205": ("detect", detect_blq_token),            # 기구현, 배선(c0253 + c0020/c0021의 reqdet)
+    "c0253": ("route", route_blq_token),              # D-S1 gate: c0205_ran → Q01/Q15D/INVALID
+    "c0020": ("transform", assign_blq_flag),          # 기구현, 활성화(GAP-15; reqdet c0205)
+    "c0021": ("transform", assign_lloq),              # 기구현, 활성화(GAP-15; reqdet c0205)
+    # ===== slice 7a — backbone activation (배선만, dispatch 무변경) =====
+    # axis A0–A10 evaluators(verify/detect). route_to_q를 반환하나 run_strand은 terminal 키만 실현 →
+    # INVALID/UNSUPPORTED/축-Q는 미실현(Phase 7 D-S4 conditional edge 소관, GAP-5/8/12/13).
+    "c0200": ("verify", verify_a0_analysis_intent),     # A0 (→Q11)
+    "c0201": ("detect", detect_sheet_inventory),        # A1 (→Q05)
+    "c0202": ("detect", classify_regimen_descriptor),   # A2
+    "c0204": ("verify", verify_amt),                    # A4 (→Q08/Q14)
+    "c0206": ("detect", classify_row_ordering),         # A6 (→Q03/Q04)
+    "c0208": ("detect", classify_analyte_column),       # A8 (→Q09; c0013 reqdet)
+    "c0209": ("verify", verify_cross_column_invariant), # A9 (→Q06/Q15D)
+    "c0210": ("detect", detect_source_format),          # A10 (UNSUPPORTED/INVALID)
+    # L-1→L-2 NONMEM 컬럼 부여. ★ GAP-29 RESOLVED(slice 7b): c0001/c0010/c0011/c0012/c0014/c0016/c0017/c0018에
+    #   meta=None 추가(본문 무변경)로 fn(df,meta) 정합. 완주 strand 미포함은 여전(27c 상류 미구현) — green 유지.
+    "c0001": ("verify", verify_column_schema),          # reqdet None  [GAP-29✓ meta=None]
+    "c0010": ("transform", assign_evid),                # reqdet c0001 [GAP-29✓ meta=None]
+    "c0011": ("transform", assign_mdv),                 # reqdet c0010 [GAP-29✓ meta=None]
+    "c0012": ("transform", assign_amt),                 # reqdet c0010 [GAP-29✓ meta=None]
+    "c0013": ("transform", assign_cmt),                 # reqdet c0208
+    "c0014": ("transform", assign_rate),                # reqdet c0010 [GAP-29✓ meta=None]
+    "c0015": ("transform", assign_addl),                # reqdet c0010
+    "c0016": ("transform", assign_ii),                  # reqdet c0015 [GAP-29✓ meta=None]
+    "c0017": ("transform", assign_dv),                  # reqdet c0011 [GAP-29✓ meta=None]
+    "c0018": ("transform", assign_id),                  # reqdet c0001 [GAP-29✓ meta=None]
+    "c0019": ("transform", assign_time),                # reqdet c0203 (기배선)
+    # covariate 부여 (reqdet c0207, 기배선). 동명함수 c_id alias.
+    "c0022": ("transform", assign_baseline_covariate_c0022),     # L-1→L-2
+    "c0023": ("transform", assign_time_varying_covariate_c0023), # L-1→L-2
+    "c0140": ("transform", assign_baseline_covariate_c0140),     # L-2→L-3
+    "c0141": ("transform", assign_time_varying_covariate_c0141), # L-2→L-3
 }
 
 

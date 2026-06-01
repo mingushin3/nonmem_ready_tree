@@ -11,7 +11,7 @@ REQUIRED_COLUMNS = ["subject_id", "event_type", "time_value", "dv_value"]
 NOTNA_COLUMNS = ["subject_id", "event_type", "time_value"]
 
 
-def verify_column_schema(df: pd.DataFrame) -> dict:
+def verify_column_schema(df: pd.DataFrame, meta: dict | None = None) -> dict:
     missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         return {"pass": False, "route_to": "INVALID", "missing_columns": missing}

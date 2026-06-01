@@ -14,7 +14,7 @@ import pandas as pd
 _INTERVAL_COL = "dose_interval"
 
 
-def assign_ii(df: pd.DataFrame) -> dict:
+def assign_ii(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     # 1) 선행조건: ADDL/TIME 존재(누락은 c0015 detection 미통과 = hard fail, Q 아님).

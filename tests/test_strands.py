@@ -53,14 +53,15 @@ def test_family_cost_within_breakdown():
 
 
 def test_family_actual_equals_best_dynamic():
-    """동적 actual==best (family segment): orchestrator가 c0340→c0341만 실행하고 하류
-    미구현 c에서 경계를 표식, family cost==4, 병합 잔존 0(silent no-op 0)."""
+    """동적 actual==best (family segment 분리 실행): c0340→c0341이 병합 잔존을 해소(silent no-op 0),
+    family cost==4. ★ slice 7a backbone 배선 후 full strand는 axis까지 진행하므로(full-strand 종착·경계는
+    test_integration_slice7a 소관) family segment를 명시 실행해 단위 동작을 분리 검증한다."""
     for s in MERGED[:3]:
         df = _merged_df()
-        rec = run_strand(s["c_sequence"], df)
+        rec = run_strand(FAMILY, df)
         assert rec["actual_c_sequence"] == FAMILY, s["sc_id"]
         assert rec["total_cost"] == 4, s["sc_id"]
-        assert rec["boundary_at"] is not None, s["sc_id"]   # 하류 미구현 경계
+        assert rec["boundary_at"] is None, s["sc_id"]   # family 2c 전부 배선 → 경계 없음
         out = rec["df"]
         # silent no-op 0: 병합 잔존이 실제로 해소됨
         assert not any((out[c].isna() & out[c].shift().notna()).any() for c in out.columns)
@@ -69,13 +70,15 @@ def test_family_actual_equals_best_dynamic():
 
 
 def test_actual_is_best_prefix():
-    """actual_c_sequence는 best strand c_sequence의 prefix와 동일(분기 없음)."""
+    """actual_c_sequence는 best strand c_sequence의 prefix와 동일(분기 없음). ★ slice 7a backbone 배선 후
+    prefix는 family를 넘어 axis까지 확장되지만 '분기-free prefix' 불변식은 유지된다(full-strand 종착은
+    test_integration_slice7a)."""
     for s in MERGED[:25]:
         df = _merged_df()
         rec = run_strand(s["c_sequence"], df)
         n = len(rec["actual_c_sequence"])
         assert rec["actual_c_sequence"] == s["c_sequence"][:n], s["sc_id"]
-        assert rec["actual_c_sequence"] == FAMILY, s["sc_id"]
+        assert "c0341" in rec["actual_c_sequence"], s["sc_id"]   # family fix(c0341)가 prefix 안에서 실행됨
 
 
 def test_d_s1_cut_vertex_negative():
@@ -368,3 +371,159 @@ def test_d_s1_placebo_artifact_gate_negative():
     assert result["success"] is False
     assert result["route_to_q"] is None
     assert meta.get("placebo_subjects") is None
+
+
+# ===== Phase 5 · Slice 6 — BLQ_TOKEN family =====
+#   mess detect+normalize(c0305 DETECT + c0306 NORMALIZE) + A5 axis(c0205) + ROUTE→Q01(c0253)
+#   + GAP-15 종결: c0306 산출 blq_detected/lloq_value가 기구현 c0020/c0021을 cross-layer 활성화.
+#   ★ Q01 strand 라우팅 실주체 = c0253(ROUTE, 645 last-c), c0306 아님 — c0306.can_route_to_q=[Q01]은
+#     Phase 7 D-S4 선언(GAP-28; slice 2 'c0019가 아니라 c0251'=GAP-26 동형).
+
+BLQ_MESS = [s for s in STRANDS if "c0306" in s["c_sequence"]]
+BLQ_Q01 = [s for s in STRANDS if s.get("q_code") == "Q01"]
+BLQ_PAIR = ["c0305", "c0306"]
+
+
+def _blq_df():
+    """BLQ 토큰 변종 혼재 — c0306이 실제 정규화(토큰 제거 + blq_detected/lloq_value)해야 silent no-op 0."""
+    return pd.DataFrame({"dv_value": ["5.2", "<0.1", "BLQ 0.05", "3.1"]})
+
+
+def _blq_activation_df():
+    """GAP-15 활성화용: 전 obs행(EVID==0)이 BLQ-with-number(c0021 Guard1: obs LLOQ 비결측 필수).
+    EVID는 상류 c0010(ASSIGN EVID) 산출을 주입(focused chain은 c0010 미경유)."""
+    return pd.DataFrame({"dv_value": ["<0.1", "<0.1", "<0.05"], "EVID": [0, 0, 0]})
+
+
+def test_blq_strand_count():
+    """BLQ_TOKEN mess(c0306)를 지나는 strand 500개, c0305도 동수(쌍 공출현)."""
+    assert len(BLQ_MESS) == 500
+    assert len([s for s in STRANDS if "c0305" in s["c_sequence"]]) == 500
+
+
+def test_blq_detection_precedes_fix_adjacent():
+    """D-S1+D-S2: 모든 500 strand에서 c0305가 c0306 직전(인접, canonical order)."""
+    for s in BLQ_MESS:
+        seq = s["c_sequence"]
+        assert "c0305" in seq, s["sc_id"]
+        assert seq.index("c0305") == seq.index("c0306") - 1, s["sc_id"]
+
+
+def test_blq_family_cost_within_breakdown():
+    """family 한계비용(1+2=3)이 strand의 L-4->L-5 cost_breakdown에 포함된다."""
+    fam_cost = COST["c0305"] + COST["c0306"]
+    assert fam_cost == 3
+    for s in BLQ_MESS:
+        assert s["cost_breakdown"].get("L-4->L-5", 0) >= fam_cost, s["sc_id"]
+
+
+def test_blq_normalize_chain_dynamic():
+    """★ 핵심목표: orchestrator가 c0305→c0306을 실행하고 BLQ 토큰을 실제 정규화(dv NaN) + blq_detected/
+    lloq_value 산출(silent no-op 0). 명시 2-c 시퀀스라 boundary 없음, cost=3."""
+    rec = run_strand(BLQ_PAIR, _blq_df(), {})
+    assert rec["actual_c_sequence"] == BLQ_PAIR
+    assert rec["boundary_at"] is None
+    assert rec["total_cost"] == 3
+    out = rec["df"]
+    # silent no-op 0: BLQ 토큰 잔존 0 (verbatim postcond)
+    assert not out["dv_value"].astype(str).str.contains(r"<|BLQ|ND|LOD|이하", case=False, na=False).any()
+    assert list(out["blq_detected"]) == [False, True, True, False]
+    assert out.loc[out["blq_detected"], "lloq_value"].tolist() == [0.1, 0.05]
+    record_path(rec, "slice6_blq_normalize")
+
+
+def test_d_s1_blq_cut_vertex_negative():
+    """★ D-S1: 감지(c0305) 없이 c0306(transform) dispatch → RuntimeError (cut-vertex 증명)."""
+    with pytest.raises(RuntimeError):
+        dispatch("c0306", _blq_df(), {})
+
+
+# ----- Q01 라우팅 (c0253 ROUTE; slice 2 D-S4 검증 재현 = C3 재발화) -----
+
+def test_q01_strand_count():
+    """Q01로 라우팅되는 strand는 정확히 445개(falsifiable)."""
+    assert len(BLQ_Q01) == 445
+
+
+def test_q01_routed_by_c0253_last():
+    """★ 고립 Q-terminal 0 + 멘탈모델 교정(GAP-28): Q01 strand 전부 c0253(ROUTE)을 last-c·QUARANTINE으로 둔다.
+    c0306(NORMALIZE)이 아니라 c0253(ROUTE)이 실제 Q01 라우터 — c0306.can_route_to_q=[Q01]은 D-S4 선언이다
+    (slice 2 'c0019가 아니라 c0251'=GAP-26 동형)."""
+    for s in BLQ_Q01:
+        assert s["c_sequence"][-1] == "c0253", s["sc_id"]
+        assert s["terminal"] == "QUARANTINE", s["sc_id"]
+
+
+def test_c0205_precedes_c0253_d_s1():
+    """D-S1: 모든 Q01 strand에서 c0253의 detection producer c0205가 선행한다."""
+    for s in BLQ_Q01:
+        seq = s["c_sequence"]
+        assert "c0205" in seq, s["sc_id"]
+        assert seq.index("c0205") < seq.index("c0253"), s["sc_id"]
+
+
+def test_route_blq_no_policy_to_q01_dynamic():
+    """★ 핵심목표(C3 재발화): orchestrator가 a5_state=BLQ-NO-POLICY(c0205 생산) → c0253 → Q01 terminal 도출."""
+    rec = run_strand(["c0205", "c0253"], pd.DataFrame({"dv_value": [0.1, 0.2]}), {"obs_blq_state": "blq-no-policy"})
+    assert rec["actual_c_sequence"] == ["c0205", "c0253"]
+    assert rec["terminal"] == "QUARANTINE"
+    assert rec["q_code"] == "Q01"
+    # cost = Σc.cost (Q.routing_cost 비가산 — strands.json 정합)
+    assert rec["total_cost"] == COST["c0205"] + COST["c0253"]
+    record_path(rec, "slice6_route_blq_no_policy")
+
+
+def test_route_blq_bioanalytical_to_q15d_dynamic():
+    """a5_state=BIOANALYTICAL-FINAL-FLAG-MISSING → c0253 → Q15D. c0253 실제 라우팅 {Q01,Q15D,INVALID}은
+    can_route_to_q=[Q01]의 상위집합 — Q15D/INVALID는 Phase 7 D-S4 재구성(GAP-28)."""
+    rec = run_strand(["c0205", "c0253"], pd.DataFrame({"dv_value": [0.1]}), {"obs_blq_state": "bioanalytical-final-flag-missing"})
+    assert rec["terminal"] == "QUARANTINE"
+    assert rec["q_code"] == "Q15D"
+
+
+def test_q01_terminal_reachable_not_isolated():
+    """★ D-S4 고립 Q-terminal 0: Q01·Q15D 모두 동적 orchestrator로 도달(C3 Q-trigger 발화)."""
+    reached = set()
+    for st in ("blq-no-policy", "lloq-missing", "bioanalytical-final-flag-missing"):
+        rec = run_strand(["c0205", "c0253"], pd.DataFrame({"dv_value": [0.1]}), {"obs_blq_state": st})
+        reached.add(rec["q_code"])
+    assert reached == {"Q01", "Q15D"}
+
+
+def test_d_s1_route_blq_cut_vertex_negative():
+    """★ D-S1: detection(c0205) 없이 c0253(route) dispatch → RuntimeError (cut-vertex 증명;
+    a5_state가 meta에 있어도 c0205_ran 부재면 거부 — gate는 감지 '실행'이지 산출물 존재가 아님)."""
+    with pytest.raises(RuntimeError):
+        dispatch("c0253", pd.DataFrame({"dv_value": [0.1]}), {"a5_state": "BLQ-NO-POLICY"})
+
+
+# ----- GAP-15 종결: cross-layer 활성화 (c0306 산출 → 기구현 c0020/c0021; slice 4 c0121 선례) -----
+
+def test_blq_activation_chain_dynamic():
+    """★★ 전략 목표·GAP-15 종결: c0306이 산출한 blq_detected/lloq_value로 기구현 c0020(ASSIGN BLQ_FLAG)·
+    c0021(ASSIGN LLOQ)이 실제 컬럼을 부여함을 orchestrator로 증명(c0205 A5 axis gate 경유, blq_policy=M3
+    외부 주입). 휴면 자산(cross-layer 입력 부재) 활성화 — detection-gate≠입력계약 두 층 중 effective producer 층 해소."""
+    rec = run_strand(["c0305", "c0306", "c0205", "c0020", "c0021"], _blq_activation_df(),
+                     {"blq_policy": "M3", "obs_blq_state": "blq-flagged"})
+    assert rec["actual_c_sequence"] == ["c0305", "c0306", "c0205", "c0020", "c0021"]
+    assert rec["boundary_at"] is None
+    assert rec["total_cost"] == 8  # 1+2+1+2+2
+    assert rec["meta"].get("a5_state") == "BLQ-FLAGGED"  # 非 fail → c0020/c0021 진행
+    out = rec["df"]
+    # c0306 effective producer: blq_detected/lloq_value
+    assert list(out["blq_detected"]) == [True, True, True]
+    # c0020: blq_detected → BLQ_FLAG (M3 likelihood policy)
+    assert "BLQ_FLAG" in out.columns
+    assert list(out["BLQ_FLAG"]) == [1, 1, 1]
+    # c0021: lloq_value → LLOQ (BLQ_FLAG 존재 시 부여, >0)
+    assert "LLOQ" in out.columns
+    assert list(out["LLOQ"]) == [0.1, 0.1, 0.05]
+    record_path(rec, "slice6_blq_activation")
+
+
+def test_d_s1_blq_flag_cut_vertex_negative():
+    """★ D-S1: detection(c0205) 없이 c0020(transform) dispatch → RuntimeError (활성화 chain cut-vertex;
+    blq_detected가 df에 있어도 c0205_ran 부재면 거부 — gate는 A5 axis '실행' 보장, 입력계약과 별개)."""
+    df = pd.DataFrame({"dv_value": [float("nan")], "EVID": [0], "blq_detected": [True], "lloq_value": [0.1]})
+    with pytest.raises(RuntimeError):
+        dispatch("c0020", df, {"blq_policy": "M3", "a5_state": "BLQ-FLAGGED"})

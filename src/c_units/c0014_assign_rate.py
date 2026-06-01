@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 
-def assign_rate(df: pd.DataFrame) -> dict:
+def assign_rate(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     if "EVID" not in df.columns:

@@ -15,7 +15,7 @@ DOSE_EVIDS = [1, 3, 4]
 NON_DOSE_EVIDS = [0, 2]
 
 
-def assign_amt(df: pd.DataFrame) -> dict:
+def assign_amt(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     if "EVID" not in df.columns or "dose_amount" not in df.columns:

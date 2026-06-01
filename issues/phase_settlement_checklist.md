@@ -5,9 +5,9 @@
 > **갱신:** slice/Phase 종료마다 갱신하는 **살아있는 백로그**(하단 [갱신 규약] 참조).
 
 ## Snapshot
-- **기준 시점:** 2026-05-31 · Phase 5 **slice 5(PLACEBO_SUBJECT) 완료 후**.
-- **테스트 baseline:** `python3 -m pytest tests/ -q` → **734 passed / 4 skipped / 1 xfailed**.
-- **집계(총 27 GAP):** OPEN **21**(GAP-1~15, 17, 18, 19, 22, 23, 24) · RESOLVED-잔여 **5**(GAP-16, 21, 25, 26, 27) · RESOLVED-clean **1**(GAP-20, 백로그 제외).
+- **기준 시점:** 2026-06-01 · Phase 5 **slice 7b(GAP-29 정규화 + 프런티어 측정) 완료 후**.
+- **테스트 baseline:** `python3 -m pytest tests/ -q` → **806 passed / 4 skipped / 1 xfailed**. (slice 7a 796 + slice 7b 프런티어 하네스 +10 → 806; c-unit 본문·dispatch 무변경, GAP-29 정규화는 def 1줄/파일.)
+- **집계(총 30 GAP):** OPEN **21**(GAP-1~14, 17, 18, 19, 22, 23, 24, 30) · RESOLVED-잔여 **8**(GAP-15, 16, 21, 25, 26, 27, 28, 29) · RESOLVED-clean **1**(GAP-20, 백로그 제외).
 - **비-GAP(상시 지침, 백로그 아님):** [PRINCIPLE] happy 입력=선행 출력 · [PRINCIPLE §6] PROPAGATE scope · [DECISIONS D1–D3].
 - **공통 패턴:** 대다수가 *"단위테스트는 fixture 주입으로 green이나 chain/tree에서 드러나는"* 구조 항목 — 즉시 결함 아님, Phase별 정산 대상.
 
@@ -33,7 +33,7 @@
 | GAP-1 | cmt_map flat(c0208) vs nested(c0013) | meta 계약 통일(orchestrator 또는 fixture/spec snippet 정정) | 계약 정정(코드/spec) |
 | GAP-2 | dose_interval 생산자 부재(c0015→c0016) | c0015가 등간격 압축 시 dose_interval emit | **spec 변경**(output_schema_delta)·승인 |
 | GAP-3 | baseline/tv_covariates 리스트 생산자 부재 | 별도 생산자(c0207 확장은 GAP-11서 불가 확정) | **spec 변경/신규 producer**·승인 |
-| GAP-15 | c0020/c0021 BLQ chain(blq_detected/lloq_value←c0306 미구현, blq_policy 외부) | c0306→c0020/c0021 cross-layer 순서 + blq_policy 주입 + c0020→c0021 순서 | 배선 + (c0306 **신규 c**) |
+| GAP-15 → **RESOLVED-잔여(slice 6)** | c0020/c0021 BLQ chain — ✅ producer 층 종결, blq_policy 외부입력만 잔여 | ✅ c0306 구현+배선 → c0020/c0021 cross-layer 활성화 동적증명(slice 6); **blq_policy는 통합 시 주입(by-design)** | 배선 완료(c0306 신규 c); blq_policy ① 통합 |
 | GAP-18 | c0019 time_value 생산자(c0311 상류, GAP-7 동형) | c0311(구현)→c0019 컬럼명(time_value) 계약 점검 | chain 점검(코드) |
 
 ## ② Phase 7 — decision-tree D-S4 (conditional edge · 고립 terminal · commutativity)
@@ -47,7 +47,10 @@
 | GAP-12 | c0209 IRRECONCILABLE→INVALID + Q06/Q15D | conditional edge + INVALID terminal 연결 | 설계(D-S4) |
 | GAP-13 | c0210 NON-TABULAR→UNSUPPORTED/CORRUPTED→INVALID | conditional edge + terminal 연결(+A10 위치 ①와 연동) | 설계(D-S4) |
 | GAP-26 | c0019/c0311/c0315/c0213 fail→Q conditional edge(strand 0) | fail-branch conditional edge 재구성 + 고립 Q-terminal 점검 | 설계(D-S4) · RESOLVED 이월 |
+| GAP-28 | c0306 can_route_to_q + c0253 Q15D/INVALID conditional edge(c0253 실제 {Q01,Q15D,INVALID} ⊋ can_route_to_q=[Q01]) | fail-branch conditional edge 재구성(c0205.can_route_to_q=[Q01,Q15D] + [[GAP-8]] ABSENT→INVALID) + 고립 Q-terminal 점검 | 설계(D-S4) · RESOLVED 이월 |
 | GAP-27(B) | FORMAT↔TIMEZONE 비-commutative 가능성(c0311→numeric이 tz 토큰 소실) | canonical order(D-S2) 결합 chain 정합·순서 재검토 | **설계 재검토** · RESOLVED 이월 |
+
+> ★ **slice 7a 경험 확인(통합 하네스 최초 가동):** backbone 가동 후 완주 173 strand 중 — axis evaluator 종착 68(c0210 64=INVALID/UNSUPPORTED, c0201 4=Q05)은 terminal **미실현**(axis verify/detect가 route_to_q만 반환, run_strand는 ROUTE terminal 키만 실현), ROUTE c(c0251/c0253)는 축-state meta 미주입 시 **default INVALID 오라우팅**(기대-q 실현 0/173). 즉 본 ② 버킷(GAP-5/8/12/13 conditional-edge 재구성)·① 외부 meta 주입이 흡수할 결손이 strand로 **규모 확인**됐다. **신규 GAP 아님.** 근거: `tests/test_integration_slice7a.py`(actual==best 173/173 구조적 통과, WITH-meta 대표 실행은 ROUTE 정상 실현 증명).
 
 ## ③ Phase 7/8 — 노드 라벨 매핑 + render
 | GAP | 요지 | (a) 처리 방침 | (b) | (c) 작업 성격 |
@@ -65,6 +68,8 @@
 | GAP-21(B) | covariate_columns 생산자 부재(df fallback 잔여) | GAP-3 종속 — 생산자 신설 시 동반 해소 | Phase 5 | spec/신규 · GAP-3 연동 |
 | GAP-17 | c0140 TIME 시점 + groupby 키 불일치 | 구현 graceful fallback 적용됨(DECISION-D3); spec snippet TIME→time_value 정정만 잔여 | spec 정산 | spec snippet 정정(선택, 이미 impl 우선) |
 | GAP-19 | c0022 fillna median ↔ IMPUTE 금지 override(확정) | 구현 override 유지(사용자 ★★★); Phase 6 alias 시 c0022/c0140 동일 처리 확인 | Phase 6 | 인지/no-action(선택 spec snippet) |
+| GAP-29 → **RESOLVED(7b)** | backbone 8c (df)-only 시그니처 ↔ fn(df,meta) 호출규약 — ✅ 정규화 완료 | 8c에 `meta=None` 기본인자 추가(본문 무변경); meta=None 충분 cite-verify(8c 본문 meta 미참조); dispatch TypeError 0·`fn(df)` 후방호환 green | **7b** | ✅ 구현 정규화(잔여: c0022/c0140 Phase 6 alias) |
+| GAP-30 | 7b wiring 전제 falsifiable 반증 — 구현=배선=46, 미배선 0; 467 완주는 상류 27c **신규 구현**(배선 아님), 5000은 73c | `issues/column_path_implementation_backlog.md` 따라 ~6–7 column-path 슬라이스(+mess까지 ~13); A=L-3→L-4 ROUTE 최우선(axis req_det 기배선, 173→353) | **Phase 5(이후 슬라이스)** | **신규 c ×27** (multi-slice) · ①/②와 별개 |
 
 ---
 
@@ -72,7 +77,7 @@
 - **추가 slice는 ①을 늘리지 않음** — 외부입력 GAP은 개별 slice가 아니라 **full-orchestrator 통합 시점에 1회 일괄 정산**(외부 meta 주입 규약 설계).
 - **Phase 7이 ②(7건)를 흡수** — 라우팅 scope·Q03·commutativity = D-S4 핵심. 고립 Q-terminal 0 / 골격 무모순이 종료 게이트.
 - **자연스러운 순서:** slice 누적 종료 → **Phase 5 full-integration(① 일괄) → 5b(GAP-23) → 6(GAP-19/20) → 7(②③) → 8(③)**.
-- **신규 작업 유발은 소수:** GAP-24(신규 VERIFY c), GAP-2/3/15(생산자 emit) — 나머지는 배선/매핑/설계.
+- **★ 신규 작업 재평가([[GAP-30]] slice 7b 교정):** 완주 173→467은 상류 column-path **27c 신규 구현**(배선 아님 — 구현=배선=46·미배선 0 falsifiable 확정)이 선결이며, `column_path_implementation_backlog.md` 따라 ~6–7 슬라이스 = **잔여 Phase 5의 주 작업량**(이전 "신규 작업 소수" 가정 교정). 467→5000은 mess 46c(별개 후속). 그 외 신규 c: GAP-24(subject-boundary VERIFY), GAP-2/3(생산자 emit). GAP-15는 c0306 emit 완료(slice 6).
 - **spec 승인 묶음**(slice 누적과 무관, 사용자 결정 시): GAP-2/3(생산자), GAP-5(Q04), GAP-16(req_det), GAP-9(A2 escape·선택).
 
 ---
@@ -85,4 +90,4 @@ slice/Phase 종료 시 본 파일을 다음 순서로 갱신한다(원장 `prove
 4. 신규 GAP이 원장에 추가되면 해당 bucket(①~④)에 행 추가.
 5. 충돌·불확실 시 원장을 신뢰하고 본 파일을 정정(반대 금지).
 
-> 이력: 2026-05-31 최초 작성(slice 4 후, OPEN 21 + 잔여 5). · 2026-05-31 slice 5(PLACEBO_SUBJECT) 후 갱신: 자기완결 detect+classify(c0392/c0393), **GAP 무변동**(신규/종결 0 — c0393 vacuous-postcond는 GAP-27 패턴 재사용, 하류 transform·활성화 없음, AMT=0↔EVID 상호작용은 미배선 future-c 소관으로 out-of-scope). 집계 불변(OPEN 21 + 잔여 5 + clean 1). baseline 704→734 passed.
+> 이력: 2026-05-31 최초 작성(slice 4 후, OPEN 21 + 잔여 5). · 2026-05-31 slice 5(PLACEBO_SUBJECT) 후 갱신: 자기완결 detect+classify(c0392/c0393), **GAP 무변동**(신규/종결 0 — c0393 vacuous-postcond는 GAP-27 패턴 재사용, 하류 transform·활성화 없음, AMT=0↔EVID 상호작용은 미배선 future-c 소관으로 out-of-scope). 집계 불변(OPEN 21 + 잔여 5 + clean 1). baseline 704→734 passed. · 2026-06-01 slice 6(BLQ_TOKEN) 후 갱신: detect+normalize 복귀(c0305/c0306) + ROUTE c0253(Q01/Q15D/INVALID) + 기구현 c0205/c0020/c0021 배선·활성화. **GAP-15 종결**(c0306 effective producer → c0020/c0021 cross-layer 활성화 동적증명; blq_policy 외부입력만 ① 통합 잔여), **GAP-28 신규**(Q01 라우터=c0253 멘탈모델 교정, GAP-26 동형 + can_route_to_q ⊊ 실제 라우팅 — D-S4 이월·RESOLVED). 집계 OPEN 21→20 · 잔여 5→7(+GAP-15,28) · 총 27→28. baseline 734→773 passed. · 2026-06-01 slice 7a(backbone-activation) 후 갱신: 기구현·미배선 backbone 23c(axis c0200–c0210 + L-1→L-2 컬럼 c0001/c0010–c0019 + covariate c0022/c0023/c0140/c0141) bare ref 배선(순수 wiring, dispatch 무변경). 통합 하네스 최초 가동(tests/test_integration_slice7a.py, +14): 완주 173 strand(ROUTE 종착 105 + axis 종착 68) **actual==best 173/173 구조적 통과** · skeleton(D-S3)/D-S1 위반 0 · 예외 0. **GAP-29 신규**(8c (df)-only 시그니처 불일치 — latent, 완주 strand 미포함=green 무영향, 7b 정규화). terminal 미실현/오실현(기대-q 실현 0/173)은 기존 ②(GAP-5/8/12/13)·①(외부 meta 주입)에 규모 연결(신규 GAP 아님; WITH-meta 대표 실행은 ROUTE 정상). slice-1 dynamic test 2개(family/prefix)는 backbone 가동으로 stop-after-family 가정 폐기 → family 분리/분기-free prefix로 정합(merge-resolution 의도 보존). 집계 OPEN 20→21(+GAP-29) · 총 28→29. baseline 773(slice 6 누락 정산 782)→**796** passed. · 2026-06-01 slice 7b(GAP-29 정규화 + 프런티어 측정) 후 갱신: 8c(c0001/c0010/c0011/c0012/c0014/c0016/c0017/c0018) 시그니처에 `meta=None` 추가(본문 무변경, `fn(df)` 후방호환) → **GAP-29 RESOLVED**(meta=None 충분 cite-verify). 프런티어 측정 하네스(tests/test_integration_slice7b.py, +10): 구현=배선=46·미배선 0(wiring 천장=173) falsifiable 고정, 27 upstream→467·73 blocker→5000·blocker 전부 미구현 측정. **GAP-30 신규**(7b wiring 전제 반증 — 467은 상류 27c **신규 구현** 선결이지 배선 아님; `column_path_implementation_backlog.md` 구현 백로그 산출). ①(기대-q 실현 0)·②(axis 종착 68 terminal=None)는 7a와 **불변**(27c는 완주 경로만 열고 ①/②와 직교). 신규 c 0(측정·문서만). 집계 OPEN 21(−GAP-29+GAP-30) · 잔여 7→8(+GAP-29) · 총 29→30. baseline 796→**806** passed.

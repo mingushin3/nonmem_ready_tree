@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 
-def assign_dv(df: pd.DataFrame) -> dict:
+def assign_dv(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     for col in ("EVID", "MDV", "dv_value"):

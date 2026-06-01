@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 
-def assign_id(df: pd.DataFrame) -> dict:
+def assign_id(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     if "subject_id" not in df.columns:

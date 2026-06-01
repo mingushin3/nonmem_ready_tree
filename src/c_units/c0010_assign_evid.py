@@ -12,7 +12,7 @@ import pandas as pd
 EVID_MAP = {"obs": 0, "dose": 1, "reset": 2, "reset_dose": 3, "ss_dose": 4}
 
 
-def assign_evid(df: pd.DataFrame) -> dict:
+def assign_evid(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     if "event_type" not in df.columns:

@@ -179,3 +179,45 @@ def test_c2_placebo_fix_to_backbone_exit_edge():
 @pytest.mark.skip(reason="C3 N/A: PLACEBO_SUBJECT family triggers no Q-code (c0392/c0393 can_route_to_q=[]).")
 def test_c3_placebo_not_applicable():
     """C3(Q-trigger): PLACEBO_SUBJECT family는 Q 없음 → 해당 없음(명시 skip)."""
+
+
+# ===== Phase 5 · Slice 6 — BLQ_TOKEN family coverage (C1–C3) =====
+# ★ slice 4/5에서 N/A로 skip되던 C3가 BLQ family(Q01 보유, c0253 ROUTE)에서 다시 발화한다(slice 2 동형).
+#   Q01 라우터는 c0306(NORMALIZE)이 아니라 c0253(ROUTE) — c0306.can_route_to_q=[Q01]은 D-S4 선언(GAP-28).
+
+BLQ_NEW = ["c0305", "c0306", "c0205", "c0253"]
+BLQ_MESS_COV = [s for s in STRANDS if "c0306" in s["c_sequence"]]
+BLQ_Q01_COV = [s for s in STRANDS if s.get("q_code") == "Q01"]
+
+
+def test_c1_each_blq_c_in_at_least_one_strand():
+    """C1: 신규/배선 BLQ c(c0305,c0306,c0205,c0253) + 활성화 대상 c0020/c0021 각각 ≥1 strand에 등장."""
+    for c in BLQ_NEW + ["c0020", "c0021"]:
+        assert sum(c in s["c_sequence"] for s in STRANDS) >= 1, c
+
+
+def test_c2_blq_edges_traversed():
+    """C2: detect→fix(c0305→c0306) + 축→ROUTE(c0205→c0253) edge가 traverse된다."""
+    for a, b in [("c0305", "c0306"), ("c0205", "c0253")]:
+        assert sum((a, b) in _edges(s["c_sequence"]) for s in STRANDS) >= 1, f"{a}->{b}"
+
+
+def test_c2_blq_fix_to_backbone_exit_edge():
+    """C2: c0306→backbone 출구 edge가 ≥1 strand에 존재(mess family가 dead-end 아님)."""
+    found = any(
+        s["c_sequence"].index("c0306") + 1 < len(s["c_sequence"]) for s in BLQ_MESS_COV
+    )
+    assert found
+
+
+def test_c3_q01_triggered():
+    """★ C3 재활성화(slice 4/5 skip 대체): Q01이 strand에서 실제 trigger된다(falsifiable 445)."""
+    q01 = sum(s.get("q_code") == "Q01" for s in STRANDS)
+    assert q01 == 445, q01
+
+
+def test_c3_q01_terminal_has_incoming_route_edge():
+    """★ C3/D-S4: Q01 terminal은 c0253 ROUTE incoming edge ≥1 (고립 Q-terminal 0; c0306 아님, GAP-28)."""
+    assert BLQ_Q01_COV
+    for s in BLQ_Q01_COV:
+        assert s["c_sequence"][-1] == "c0253", s["sc_id"]

@@ -47,6 +47,9 @@ from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
 from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
 from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
 from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
+from src.c_units.c0305_detect_blq_token import detect_blq_token_mess
+from src.c_units.c0306_normalize_blq_token import normalize_blq_token
+from src.c_units.c0253_route_blq_token import route_blq_token
 
 
 class TestC0340:
@@ -4125,3 +4128,138 @@ class TestC0393:
         assert result["success"] is False
         assert result["route_to_q"] is None
         assert meta.get("placebo_subjects") is None
+
+
+class TestC0305:
+    """c0305 — BLQ 토큰 감지 (DETECT BLQ_TOKEN, mess 층 L-4->L-5)
+
+    postcondition_predicate:
+        isinstance(meta.get('blq_variants_found'), list)
+
+    srp_intent: DETECT BLQ_TOKEN
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0306
+        fail_route_to: null
+    (함수명 detect_blq_token_mess — c0205 detect_blq_token(L-3->L-4 A5 축)와 구분.
+     ★ postcond는 list-타입만 검사 — 토큰 실재 시 silent [] 금지(behavioral trap).)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """BLQ 변종 혼재([5.2,<0.1,BLQ,3.1]) → blq_variants_found=['<0.1','BLQ'], pass→c0306."""
+        df, meta, expected = load_fixture_with_meta("c0305", "happy")
+        result = detect_blq_token_mess(df, meta)
+        assert result["blq_variants_found"] == expected["blq_variants_found"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('blq_variants_found'), list)
+
+    def test_edge(self, load_fixture_with_meta):
+        """BLQ 토큰 부재(순수 numeric) → blq_variants_found=[] (정직한 빈 감지)."""
+        df, meta, expected = load_fixture_with_meta("c0305", "edge")
+        result = detect_blq_token_mess(df, meta)
+        assert result["blq_variants_found"] == expected["blq_variants_found"]
+        assert isinstance(meta.get('blq_variants_found'), list)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ silent-miss 차단: 실재 토큰([<0.05,ND])이 실제 감지됨(빈 [] 묵살 금지 — vacuous postcond 보강)."""
+        df, meta, expected = load_fixture_with_meta("c0305", "trap")
+        result = detect_blq_token_mess(df, meta)
+        assert result["blq_variants_found"] == ["<0.05", "ND"]
+        assert result["blq_variants_found"]  # 비어있지 않음
+        assert isinstance(meta.get('blq_variants_found'), list)
+
+
+class TestC0306:
+    """c0306 — BLQ 토큰 정규화 (NORMALIZE BLQ_TOKEN, mess 층 L-4->L-5)
+
+    postcondition_predicate:
+        not df['dv_value'].astype(str).str.contains(r'<|BLQ|ND|LOD|이하', case=False, na=False).any()
+
+    srp_intent: NORMALIZE BLQ_TOKEN
+    kind: transform
+    requires_detection_by: c0305
+    can_route_to_q: ['Q01']
+    (★ postcond NON-vacuous — 토큰 잔존 시 곧장 fail이라 silent no-op 0 자동 강제. 산출
+     blq_detected/lloq_value는 하류 c0020/c0021가 cross-layer 소비(GAP-15). can_route_to_q=[Q01]은
+     Phase 7 D-S4 선언이며 라우팅 실주체는 c0253(GAP-28).)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """[5.2,<0.1,BLQ 0.05,3.1] → 토큰 제거(dv NaN) + blq_detected=[F,T,T,F] + lloq=[0.1,0.05]."""
+        df, meta, expected = load_fixture_with_meta("c0306", "happy")
+        result = normalize_blq_token(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert not df_out['dv_value'].astype(str).str.contains(r'<|BLQ|ND|LOD|이하', case=False, na=False).any()
+        assert list(df_out["blq_detected"]) == expected["blq_detected"]
+        assert df_out.loc[df_out["blq_detected"], "lloq_value"].tolist() == expected["lloq_detected"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """BLQ 토큰 부재(순수 numeric) → 변경 없음, blq_detected 전부 False, postcond vacuously True."""
+        df, meta, expected = load_fixture_with_meta("c0306", "edge")
+        result = normalize_blq_token(df, meta)
+        assert result["success"] == expected["success"]
+        df_out = result["df"]
+        assert not df_out['dv_value'].astype(str).str.contains(r'<|BLQ|ND|LOD|이하', case=False, na=False).any()
+        assert list(df_out["blq_detected"]) == expected["blq_detected"]
+        assert df_out.loc[df_out["blq_detected"], "lloq_value"].tolist() == expected["lloq_detected"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ silent no-op 차단: 토큰([<0.1,BLQ,ND])이 실제 제거됨(미처리 시 postcond 위반·토큰 잔존)."""
+        df, meta, expected = load_fixture_with_meta("c0306", "trap")
+        result = normalize_blq_token(df, meta)
+        df_out = result["df"]
+        assert not df_out['dv_value'].astype(str).str.contains(r'<|BLQ|ND|LOD|이하', case=False, na=False).any()
+        assert list(df_out["blq_detected"]) == [True, True, True]
+
+
+class TestC0253:
+    """c0253 — A5 실패 라우팅 (ROUTE BLQ_TOKEN)
+
+    postcondition_predicate:
+        routing_decision in ['Q01', 'Q15D', 'INVALID']
+
+    srp_intent: ROUTE BLQ_TOKEN
+    kind: route
+    requires_detection_by: c0205
+    can_route_to_q: ['Q01']
+    매핑(SSOT strands.json 645 last-c: Q01 445 / Q15D 89 / INVALID 111, c0205._route_a5 동형):
+      {BLQ-NO-POLICY,LLOQ-MISSING,ABOVE-ULOQ-NO-POLICY,REPLICATE-NO-POLICY}→Q01,
+      BIOANALYTICAL-FINAL-FLAG-MISSING→Q15D, ABSENT→INVALID.
+    (can_route_to_q=[Q01] ⊊ 실제 라우팅 — Q15D/INVALID는 Phase 7 D-S4 재구성, GAP-28.)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a5_state=BLQ-NO-POLICY → Q01 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0253", "happy")
+        result = route_blq_token(df, meta)
+        assert result["routing_decision"] in ['Q01', 'Q15D', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """a5_state=BIOANALYTICAL-FINAL-FLAG-MISSING → Q15D (QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0253", "edge")
+        result = route_blq_token(df, meta)
+        assert result["routing_decision"] in ['Q01', 'Q15D', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ ABSENT를 Q01로 silent 승격 금지 → INVALID(q_code=None) (SSOT 111 strand)."""
+        df, meta, expected = load_fixture_with_meta("c0253", "trap")
+        result = route_blq_token(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["terminal"] == "INVALID"
+        assert result["q_code"] is None
+
+    def test_all_q01_states_mapped(self):
+        """★ 불완전 매핑 차단: Q01 4-state 전부 Q01로(BLQ-NO-POLICY만 매핑 후 나머지 누락 금지)."""
+        for st in ("BLQ-NO-POLICY", "LLOQ-MISSING", "ABOVE-ULOQ-NO-POLICY", "REPLICATE-NO-POLICY"):
+            r = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": st})
+            assert r["routing_decision"] == "Q01", st
+            assert r["q_code"] == "Q01", st

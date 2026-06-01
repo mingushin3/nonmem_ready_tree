@@ -14,7 +14,7 @@ import pandas as pd
 DOSE_EVIDS = [1, 2, 3, 4]
 
 
-def assign_mdv(df: pd.DataFrame) -> dict:
+def assign_mdv(df: pd.DataFrame, meta: dict | None = None) -> dict:
     df = df.copy()
 
     if "EVID" not in df.columns:
