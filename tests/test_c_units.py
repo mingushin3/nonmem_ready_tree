@@ -43,6 +43,10 @@ from src.c_units.c0311_convert_time_format import convert_time_format
 from src.c_units.c0315_convert_time_anchor import convert_time_anchor
 from src.c_units.c0312_detect_timezone import detect_timezone
 from src.c_units.c0313_normalize_timezone import normalize_timezone
+from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
+from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
+from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
+from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 
 
 class TestC0340:
@@ -3942,3 +3946,182 @@ class TestC0313:
         assert result["success"] is False
         assert result["route_to_q"] is None
         assert meta.get('tz_normalized') is not True
+
+
+class TestC0380:
+    """c0380 — 공변량 레이아웃 감지 (DETECT COVARIATE_LAYOUT)
+
+    postcondition_predicate:
+        meta.get('cov_layout') in ['wide', 'long', 'none']
+
+    srp_intent: DETECT COVARIATE_LAYOUT
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0381
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """wide(WT_V1,WT_V2,WT_V3) → cov_layout='wide', pass→c0381."""
+        df, meta, expected = load_fixture_with_meta("c0380", "happy")
+        result = detect_covariate_layout(df, meta)
+        assert result["cov_layout"] == expected["cov_layout"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('cov_layout') in ['wide', 'long', 'none']
+
+    def test_edge(self, load_fixture_with_meta):
+        """long(plain WT 단일 컬럼, visit 반복 없음) → cov_layout='long'."""
+        df, meta, expected = load_fixture_with_meta("c0380", "edge")
+        result = detect_covariate_layout(df, meta)
+        assert result["cov_layout"] == expected["cov_layout"]
+        assert meta.get('cov_layout') in ['wide', 'long', 'none']
+
+    def test_trap(self, load_fixture_with_meta):
+        """비-covariate 접미사 컬럼(DOSE_AMT) 혼재 속 covariate wide(AGE_V1,AGE_V2)를
+        'none'으로 silent 오판 금지 → 'wide' (멤버십만 보는 postcond의 vacuous 통과 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0380", "trap")
+        result = detect_covariate_layout(df, meta)
+        assert result["cov_layout"] == "wide"
+        assert meta.get('cov_layout') in ['wide', 'long', 'none']
+
+
+class TestC0381:
+    """c0381 — 공변량 레이아웃 분류 (CLASSIFY COVARIATE_LAYOUT)
+
+    postcondition_predicate:
+        meta.get('cov_layout_classified', False)
+
+    srp_intent: CLASSIFY COVARIATE_LAYOUT
+    kind: detect
+    requires_detection_by: c0380
+    can_route_to_q: []
+    (★ postcond는 단순 flag(default=False). 순수 no-op은 default-False로 잡히나, cov_layout(c0380 산출)
+     없이 flag=True면 vacuous classification — GAP-27식으로 detection 산출에 gate. spec frozen, override 아님.)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """cov_layout='wide'(c0380 산출) → cov_layout_classified=True 명시 설정, pass."""
+        df, meta, expected = load_fixture_with_meta("c0381", "happy")
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] == expected["success"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('cov_layout_classified', False)
+
+    def test_edge(self, load_fixture_with_meta):
+        """cov_layout='none'(공변량 불요) → 정당한 분류, flag 설정(idempotent, 부재≠silent no-op)."""
+        df, meta, expected = load_fixture_with_meta("c0381", "edge")
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] == expected["success"]
+        assert meta.get('cov_layout_classified', False)
+
+    def test_trap(self, load_fixture_with_meta):
+        """무효 cov_layout('garbage') → vacuous flag 설정 금지: success=False, flag 미설정."""
+        df, meta, expected = load_fixture_with_meta("c0381", "trap")
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] == expected["success"]
+        assert meta.get('cov_layout_classified') is not True
+
+    def test_cov_layout_missing_not_silent_noop(self):
+        """★ GAP-27 ③/GAP-21(C): detection(c0380) 산출물 meta['cov_layout'] 부재 시 silent 통과 금지 —
+        success=False·route_to_q=None(Q 날조 금지)·flag 미설정(vacuous postcond에 의존하지 않음)."""
+        df = pd.DataFrame({"ID": [1, 2]})
+        meta = {}
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get('cov_layout_classified') is not True
+
+
+class TestC0392:
+    """c0392 — 위약군 피험자 감지 (DETECT PLACEBO_SUBJECT)
+
+    postcondition_predicate:
+        isinstance(meta.get('has_placebo'), bool)
+
+    srp_intent: DETECT PLACEBO_SUBJECT
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []
+    verify_visualization:
+        pass_route_to: c0393
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """AMT=0(피험자 2) 존재 → has_placebo=True, pass→c0393."""
+        df, meta, expected = load_fixture_with_meta("c0392", "happy")
+        result = detect_placebo_subject(df, meta)
+        assert result["has_placebo"] == expected["has_placebo"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('has_placebo'), bool)
+
+    def test_edge(self, load_fixture_with_meta):
+        """dose 전부 양수(위약 없음) → has_placebo=False(날조 금지)."""
+        df, meta, expected = load_fixture_with_meta("c0392", "edge")
+        result = detect_placebo_subject(df, meta)
+        assert result["has_placebo"] == expected["has_placebo"]
+        assert isinstance(meta.get('has_placebo'), bool)
+
+    def test_trap(self, load_fixture_with_meta):
+        """dose 누락(NaN, 피험자 2)은 있으나 실제 AMT=0 없음 → has_placebo=False
+        (누락 dose를 위약으로 silent 오판 금지 = AMT=0 vs 누락 구분 criterion)."""
+        df, meta, expected = load_fixture_with_meta("c0392", "trap")
+        result = detect_placebo_subject(df, meta)
+        assert result["has_placebo"] is False
+        assert isinstance(meta.get('has_placebo'), bool)
+
+
+class TestC0393:
+    """c0393 — 위약군 분류 (CLASSIFY PLACEBO_SUBJECT)
+
+    postcondition_predicate:
+        isinstance(meta.get('placebo_subjects'), list)
+
+    srp_intent: CLASSIFY PLACEBO_SUBJECT
+    kind: detect
+    requires_detection_by: c0392
+    can_route_to_q: []
+    (★ postcond는 타입(list)만 검사 — 빈 list도 통과. detection(has_placebo) 없이/잘못된 분류는
+     GAP-27식으로 has_placebo artifact에 gate. spec frozen, override 아님. 실제 위약 피험자가 있으면
+     silent [] 금지(behavioral assert).)
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """has_placebo=True(c0392 산출) + AMT=0 피험자 [2] → placebo_subjects=[2] 명시 산출, success."""
+        df, meta, expected = load_fixture_with_meta("c0393", "happy")
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] == expected["success"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get("placebo_subjects") == expected["placebo_subjects"]
+        assert isinstance(meta.get('placebo_subjects'), list)
+
+    def test_edge(self, load_fixture_with_meta):
+        """has_placebo=False(위약 없음) → placebo_subjects=[] 정당한 빈 분류(부재≠silent no-op), success."""
+        df, meta, expected = load_fixture_with_meta("c0393", "edge")
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] == expected["success"]
+        assert meta.get("placebo_subjects") == expected["placebo_subjects"]
+        assert isinstance(meta.get('placebo_subjects'), list)
+
+    def test_trap(self, load_fixture_with_meta):
+        """has_placebo=True, 피험자 2 dose 누락(NaN) + 피험자 3 AMT=0 혼재 → placebo_subjects=[3]
+        (NaN을 AMT=0으로 오집계 금지 ∧ 실제 위약 피험자 silent drop 금지 — vacuous []/[2,3] 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0393", "trap")
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] == expected["success"]
+        assert meta.get("placebo_subjects") == expected["placebo_subjects"]
+        assert isinstance(meta.get('placebo_subjects'), list)
+
+    def test_placebo_detection_missing_not_silent_noop(self):
+        """★ GAP-27 ③/GAP-21(C): detection(c0392) 산출물 meta['has_placebo'] 부재 시 silent 통과 금지 —
+        success=False·route_to_q=None(Q 날조 금지)·placebo_subjects 미설정(vacuous postcond에 의존하지 않음)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, 0]})
+        meta = {}
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get("placebo_subjects") is None

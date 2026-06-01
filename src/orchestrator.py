@@ -5,7 +5,8 @@
 (PROMPTS L298). 영구 stub 금지 — 미구현 c는 진짜로 미구현이다.
 slice 1 = MERGED_CELL(c0340/c0341). slice 2 = TIME family(축 detect c0203 + verify c0213
 + ROUTE c0251 + 하류 mess c0310/c0311/c0314/c0315). slice 3 = TIMEZONE(c0312/c0313, TIME mess
-블록 마무리; can_route_to_q=[] → no Q).
+블록 마무리; can_route_to_q=[] → no Q). slice 4 = COVARIATE_LAYOUT(c0380/c0381 + 기구현 c0121 PIVOT
+활성화, GAP-16 종결). slice 5 = PLACEBO_SUBJECT(c0392/c0393, 자기완결·하류 transform 없음; no Q).
 
 D-S1 (detection-mandatory): transform·route c의 requires_detection_by가 가리키는 DETECT/VERIFY c가
 먼저 실행(meta에 '{req}_ran' 기록)되지 않으면 dispatch가 거부한다(cut-vertex). 즉 runtime은
@@ -39,6 +40,14 @@ from src.c_units.c0315_convert_time_anchor import convert_time_anchor
 # slice 3: TIMEZONE mess normalization (L-4->L-5 detect+normalize) — TIME mess 블록 마무리
 from src.c_units.c0312_detect_timezone import detect_timezone
 from src.c_units.c0313_normalize_timezone import normalize_timezone
+# slice 4: COVARIATE_LAYOUT mess(L-4->L-5 detect+classify) + 기구현 자산 c0121 활성화(GAP-16 종결)
+from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
+from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
+from src.c_units.c0207_classify_covariate_layout import classify_covariate_layout
+from src.c_units.c0121_pivot_covariate_layout import pivot_covariate_layout
+# slice 5: PLACEBO_SUBJECT mess(L-4->L-5 detect+classify) — 자기완결(하류 transform·활성화 없음)
+from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
+from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 
 _CUNITS_PATH = PROJECT_ROOT / "spec" / "c_units.json"
 _CUNITS = json.loads(_CUNITS_PATH.read_text(encoding="utf-8"))
@@ -62,6 +71,18 @@ REGISTRY = {
     # slice 3 — TIMEZONE 정규화(L-4->L-5): detect+normalize 쌍 (D-S1: c0313 reqdet=c0312, 자동 gate)
     "c0312": ("detect", detect_timezone),
     "c0313": ("transform", normalize_timezone),
+    # slice 4 — COVARIATE_LAYOUT: mess detect+classify(c0380/c0381) + 활성화 chain(c0207 A7 axis → c0121 PIVOT)
+    # c0381은 detect 등록(D-S1 orchestrator gate는 transform/route 대상) — c0380 의존은 impl artifact-guard(GAP-27).
+    # c0121(transform, reqdet=c0207)는 c0207_ran D-S1 gate 자동; c0380 산출 cov_layout='wide'로 실제 pivot(GAP-16 종결).
+    "c0380": ("detect", detect_covariate_layout),
+    "c0381": ("detect", classify_covariate_layout_mess),
+    "c0207": ("detect", classify_covariate_layout),
+    "c0121": ("transform", pivot_covariate_layout),
+    # slice 5 — PLACEBO_SUBJECT: mess detect+classify(c0392/c0393). can_route_to_q=[] → no Q.
+    # 자기완결(하류 transform/활성화 없음, mess_catalog M103–105). c0393은 detect 등록(D-S1 orchestrator
+    # gate는 transform/route 대상) — c0392 의존(has_placebo)은 impl artifact-guard(GAP-27 동형, c0381 선례).
+    "c0392": ("detect", detect_placebo_subject),
+    "c0393": ("detect", classify_placebo_subject),
 }
 
 

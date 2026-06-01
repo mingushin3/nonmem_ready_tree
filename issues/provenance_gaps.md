@@ -225,9 +225,11 @@
 - **현상:** c0121(`PIVOT COVARIATE_LAYOUT`, L-2→L-3)의 `requires_detection_by=c0207`이고 precond/snippet은 `meta.get('cov_layout') == 'wide'`로 분기한다. 그러나 c0207(`CLASSIFY COVARIATE_LAYOUT` = A7)은 `meta['a7_state']`만 emit하고 **`cov_layout`은 생산하지 않는다**([[GAP-11]] 확정: c0207 output=a7_state 단일). `cov_layout` 생산자는 mess 층 **c0380(`DETECT COVARIATE_LAYOUT`)·c0381(`CLASSIFY COVARIATE_LAYOUT`, 둘 다 L-4→L-5, 미구현)**이다(c_units.json c0380 output: `meta['cov_layout']`∈{wide,long,none}).
 - **★ D-S1 함의:** c0121을 실제로 trigger하는 detection은 c0381(cov_layout 산출)이지 c0207이 아니다. 현 req_det는 *axis 평가*(a7_state)는 보장하나 *c0121이 읽는 분기키*(cov_layout)는 보장하지 못한다 → 명목상 gate 충족, 실효 gate 미충족. cov_layout 부재 시 precond False → c0121 **silent no-op**(pivot 미수행; Lock 3 silent-error 우려).
 - **[[GAP-11]] 관계:** GAP-11은 c0207이 baseline_covariates/tv_covariates 리스트를 미생산함을 다룬다([[GAP-3]] 소관). 본 항은 별개 키 `cov_layout`의 생산자가 c0380/c0381임을 명시 — c0207은 cov_layout도 미생산.
-- **해결 후보:** (a) c0121.requires_detection_by를 c0381로 정정(spec 변경, 사용자 승인), (b) orchestrator가 c0380/c0381을 c0121 선행으로 배선(Phase 5). 본 단계는 기록만.
-- **status:** OPEN (detection 오지정, 수정 안 함)
-- **영향 범위:** Phase 4 (c0121 fixture: cov_layout 주입), Phase 5 (c0380/c0381→c0121 배선), spec (req_det 정정 결정)
+- **해결 후보:** (a) c0121.requires_detection_by를 c0381로 정정(spec 변경, 사용자 승인), (b) orchestrator가 c0380/c0381을 c0121 선행으로 배선(Phase 5).
+- **★ 종결(Phase 5 slice 4 — 해결후보 (b) 채택):** c0380(`DETECT COVARIATE_LAYOUT`)·c0381(`CLASSIFY COVARIATE_LAYOUT`) 구현·배선 완료(`src/c_units/c0380_*`·`c0381_*`; orchestrator REGISTRY 4 엔트리). orchestrator가 c0380(→`meta['cov_layout']`)→c0381→c0207(→`c0207_ran`)→c0121 chain을 실행하면 **휴면 자산이던 c0121이 c0380 산출 `cov_layout='wide'`로 실제 wide→long pivot을 수행**함을 동적 테스트로 증명(`tests/test_strands.py::test_c0121_activation_chain_dynamic` — WT_V1,WT_V2 → long 4행). D-S1 cut-vertex도 `test_d_s1_covariate_cut_vertex_negative`(c0207_ran 부재 시 RuntimeError)로 고정. ⇒ **실효(effective) detection 결손 해소.**
+- **잔여(별도 승인 — 해결후보 (a)):** `requires_detection_by` 필드 자체를 c0207→c0381로 *정정*하는 것은 spec 변경이라 미수행. c0121 precond은 **이중 의존**(`cov_layout` ← c0380, `c0207_passed` ← c0207)이라 단일 req_det 필드로 둘 다 표현 불가 — respec 시 (i) req_det=c0381(cov_layout 실효 detection)로 바꾸고 c0207_passed는 precond에 유지, 또는 (ii) dual-detector 표기 도입 중 택1을 사용자 승인 후 결정. c0121.py docstring "둘 다 미구현" 문구는 stale(현재 구현·배선됨) → 차기 spec 정산 시 동반 수정.
+- **status:** RESOLVED (effective detection 배선·활성화 증명 완료 — slice 4; req_det 필드 respec만 spec 승인 대기). [[GAP-21]]/[[GAP-22]] 연계.
+- **영향 범위:** Phase 5 slice 4 (c0380/c0381 구현 + orchestrator 배선 + 활성화 검증 — 완료), spec (req_det 정정 결정 — 승인 대기)
 
 ---
 
@@ -318,8 +320,9 @@
   - **구현:** `pd.wide_to_long(df, stubnames=bases, i=id_cols, j='visit', sep='_', suffix='.+')` + id_cols+visit 사전식 정렬(deterministic). multi-cov는 별도 컬럼 보존. silent-error 고정: `test_adversarial.TestC0121Adversarial.test_value_column_named_by_base_not_cov_value`(①)·`test_multi_covariate_not_mixed`(③)·`test_pivot_no_row_loss_or_dup`(무결성).
 - **(B) `meta['covariate_columns']` 생산자 부재([[GAP-3]] 동형):** postcond가 순회하는 `meta['covariate_columns']`를 `output_schema_delta`로 생성하는 c가 c-unit 집합 어디에도 없다(grep: c0121 postcond에만 등장). [[GAP-3]](baseline_covariates/tv_covariates 생산자 부재)와 동형 — 어느 층도 생산하지 않는 키. 단위테스트는 fixture meta로 직접 주입. silent no-op 방지를 위해 부재 시 df fallback(`{base}_{visit}`에서 base가 `_COVARIATE_COLS`면 채택; c0207/c0140 `_covariate_columns` 동형). Phase 5 일괄 정산.
 - **(C) cov_layout 분기키 생산자 = c0380/c0381([[GAP-16]] 참조, 중복 금지):** 분기키 `meta['cov_layout']`(∈{wide,long,none})는 c0207(a7_state만 emit)이 아니라 mess층 c0380/c0381(미구현)이 생산 — 이미 [[GAP-16]]에 기록. cov_layout 부재 시 silent no-op 금지(Lock 3): success=False + route_to_q=None(can_route_to_q=[] → scope-out None, Q 날조 금지; [[GAP-5]]/[[GAP-8]]/[[GAP-13]] 선례). `test_trap_cov_layout_missing`·`test_cov_layout_missing_not_silent_noop`로 고정.
-- **status:** OPEN (구현 override 확정 — 사용자 ★★★; spec snippet frozen, 수정 안 함). 단위테스트 557 green.
-- **영향 범위:** Phase 4 (c0121 구현 완료 — refined), Phase 5 (covariate_columns/cov_layout 생산자 c0380/c0381 배선 + 외부 주입), Phase 7/8 (HTML snippet 렌더 시 plain-melt snippet ↔ refined 구현 불일치 주의 — [[GAP-14]] 노드 라벨 매핑 동류). [[GAP-16]]/[[GAP-3]]/[[GAP-19]] 연계.
+- **★ 종결(Phase 5 slice 4):** (C) 분기키 `cov_layout` 생산자 c0380/c0381 **구현·배선 완료** → c0121이 외부 fixture 주입 없이 orchestrator chain(c0380→…→c0121)으로 실제 pivot(`test_c0121_activation_chain_dynamic`). (A) refined 구현은 Phase 4 완료 유지. (B) `meta['covariate_columns']` 생산자는 여전히 부재 → c0121 df fallback(`{base}_{visit}`에서 base∈`_COVARIATE_COLS`)으로 처리(GAP-3 family 잔여-by-design; 활성화 테스트가 WT_V1/WT_V2 fallback 경로를 green으로 고정). [[GAP-16]] 동반 종결.
+- **status:** RESOLVED ((A) Phase 4 / (C) slice 4 배선·활성화 완료; (B) covariate_columns df fallback 잔여 — spec 신설은 범위 밖). 전체 테스트 704 passed.
+- **영향 범위:** Phase 4 (c0121 구현 완료 — refined), Phase 5 slice 4 (cov_layout 생산자 c0380/c0381 배선 + 활성화 — 완료), Phase 7/8 (HTML snippet 렌더 시 plain-melt snippet ↔ refined 구현 불일치 주의 — [[GAP-14]] 노드 라벨 매핑 동류). [[GAP-16]]/[[GAP-3]]/[[GAP-19]] 연계.
 
 ---
 

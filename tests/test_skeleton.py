@@ -113,3 +113,69 @@ def test_timezone_family_introduces_no_q_edge():
     vv = CUNITS["c0312"].get("verify_visualization") or {}
     assert vv.get("fail_route_to") is None
     assert CUNITS["c0313"].get("verify_visualization") is None
+
+
+# ===== Phase 5 · Slice 4 — COVARIATE_LAYOUT family skeleton (D-S3/D-S4) =====
+
+COV_MESS_C = ["c0380", "c0381"]
+COV_STRANDS = [s for s in STRANDS if "c0380" in s["c_sequence"]]
+
+
+def test_covariate_mess_precedes_backbone():
+    """D-S3: 모든 534 strand에서 마지막 L-4->L-5 c index < 첫 비-L-4->L-5(backbone) c index."""
+    for s in COV_STRANDS:
+        seq = s["c_sequence"]
+        mess_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] == "L-4->L-5"]
+        backbone_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] != "L-4->L-5"]
+        assert mess_idx, s["sc_id"]
+        if backbone_idx:
+            assert max(mess_idx) < min(backbone_idx), s["sc_id"]
+
+
+def test_covariate_c_layer_assignment():
+    """c0380/c0381은 L-4->L-5(mess 전처리 stage). 활성화 대상 c0121은 L-2->L-3 backbone(전이 위반 아님)."""
+    for c in COV_MESS_C:
+        assert CUNITS[c]["layer_pair"] == "L-4->L-5", c
+    assert CUNITS["c0121"]["layer_pair"] == "L-2->L-3"
+
+
+def test_covariate_family_introduces_no_q_edge():
+    """D-S4: COVARIATE_LAYOUT family는 Q-code 트리거 없음(can_route_to_q=[]) → 고립 Q-terminal 무기여."""
+    assert CUNITS["c0380"]["can_route_to_q"] == []
+    assert CUNITS["c0381"]["can_route_to_q"] == []
+    vv = CUNITS["c0380"].get("verify_visualization") or {}
+    assert vv.get("fail_route_to") is None
+    assert CUNITS["c0381"].get("verify_visualization") is None
+
+
+# ===== Phase 5 · Slice 5 — PLACEBO_SUBJECT family skeleton (D-S3/D-S4) =====
+
+PBO_MESS_C = ["c0392", "c0393"]
+PBO_STRANDS = [s for s in STRANDS if "c0392" in s["c_sequence"]]
+
+
+def test_placebo_mess_precedes_backbone():
+    """D-S3: 모든 543 strand에서 마지막 L-4->L-5 c index < 첫 비-L-4->L-5(backbone) c index."""
+    for s in PBO_STRANDS:
+        seq = s["c_sequence"]
+        mess_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] == "L-4->L-5"]
+        backbone_idx = [i for i, c in enumerate(seq) if CUNITS[c]["layer_pair"] != "L-4->L-5"]
+        assert mess_idx, s["sc_id"]
+        if backbone_idx:
+            assert max(mess_idx) < min(backbone_idx), s["sc_id"]
+
+
+def test_placebo_c_layer_assignment():
+    """c0392/c0393은 L-4->L-5(mess 전처리 stage). 하류 transform/활성화 대상 없음(자기완결)."""
+    for c in PBO_MESS_C:
+        assert CUNITS[c]["layer_pair"] == "L-4->L-5", c
+
+
+def test_placebo_family_introduces_no_q_edge():
+    """D-S4: PLACEBO_SUBJECT family는 Q-code 트리거 없음(can_route_to_q=[]) → 고립 Q-terminal 무기여."""
+    assert CUNITS["c0392"]["can_route_to_q"] == []
+    assert CUNITS["c0393"]["can_route_to_q"] == []
+    vv = CUNITS["c0392"].get("verify_visualization") or {}
+    assert vv.get("fail_route_to") is None
+    assert vv.get("pass_route_to") == "c0393"
+    assert CUNITS["c0393"].get("verify_visualization") is None

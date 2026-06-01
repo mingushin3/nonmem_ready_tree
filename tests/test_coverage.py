@@ -110,3 +110,72 @@ def test_c2_timezone_fix_to_backbone_exit_edge():
 @pytest.mark.skip(reason="C3 N/A: TIMEZONE family triggers no Q-code (c0312/c0313 can_route_to_q=[]).")
 def test_c3_timezone_not_applicable():
     """C3(Q-trigger): TIMEZONE family는 Q 없음 → 해당 없음(명시 skip)."""
+
+
+# ===== Phase 5 · Slice 4 — COVARIATE_LAYOUT family coverage (C1–C2) =====
+# ★ c0380/c0381 모두 can_route_to_q=[] → C3(Q-trigger) 해당 없음(slice 1/3과 동형 skip).
+# 활성화 chain(c0380→…→c0121) edge는 strand-인접 아님 → orchestrator 동적 검증 소관(test_strands).
+
+COV_NEW = ["c0380", "c0381"]
+COV = [s for s in STRANDS if "c0380" in s["c_sequence"]]
+
+
+def test_c1_each_covariate_c_in_at_least_one_strand():
+    """C1: c0380, c0381 각각 ≥1 strand에 등장(실제 534). 활성화 대상 c0121도 ≥1(실제 6)."""
+    for c in COV_NEW:
+        assert sum(c in s["c_sequence"] for s in STRANDS) >= 1, c
+    assert sum("c0121" in s["c_sequence"] for s in STRANDS) >= 1
+
+
+def test_c2_covariate_detect_to_fix_edge_traversed():
+    """C2: c0380→c0381 edge가 traverse된다(실제로 534 strand 전부)."""
+    count = sum(("c0380", "c0381") in _edges(s["c_sequence"]) for s in COV)
+    assert count >= 1
+    assert count == 534
+
+
+def test_c2_covariate_fix_to_backbone_exit_edge():
+    """C2: c0381→backbone 출구 edge가 ≥1 strand에 존재(family가 dead-end 아님)."""
+    found = any(
+        s["c_sequence"].index("c0381") + 1 < len(s["c_sequence"]) for s in COV
+    )
+    assert found
+
+
+@pytest.mark.skip(reason="C3 N/A: COVARIATE_LAYOUT family triggers no Q-code (c0380/c0381 can_route_to_q=[]).")
+def test_c3_covariate_not_applicable():
+    """C3(Q-trigger): COVARIATE_LAYOUT family는 Q 없음 → 해당 없음(명시 skip)."""
+
+
+# ===== Phase 5 · Slice 5 — PLACEBO_SUBJECT family coverage (C1–C2) =====
+# ★ c0392/c0393 모두 can_route_to_q=[] → C3(Q-trigger) 해당 없음(slice 1/3/4와 동형 skip).
+# 자기완결: 하류 transform 부재(mess_catalog M103–105) — 활성화 chain 없음(slice 4와 차이).
+
+PBO_NEW = ["c0392", "c0393"]
+PBO = [s for s in STRANDS if "c0392" in s["c_sequence"]]
+
+
+def test_c1_each_placebo_c_in_at_least_one_strand():
+    """C1: c0392, c0393 각각 ≥1 strand에 등장(실제 543)."""
+    for c in PBO_NEW:
+        assert sum(c in s["c_sequence"] for s in STRANDS) >= 1, c
+
+
+def test_c2_placebo_detect_to_fix_edge_traversed():
+    """C2: c0392→c0393 edge가 traverse된다(실제로 543 strand 전부)."""
+    count = sum(("c0392", "c0393") in _edges(s["c_sequence"]) for s in PBO)
+    assert count >= 1
+    assert count == 543
+
+
+def test_c2_placebo_fix_to_backbone_exit_edge():
+    """C2: c0393→backbone 출구 edge가 ≥1 strand에 존재(family가 dead-end 아님)."""
+    found = any(
+        s["c_sequence"].index("c0393") + 1 < len(s["c_sequence"]) for s in PBO
+    )
+    assert found
+
+
+@pytest.mark.skip(reason="C3 N/A: PLACEBO_SUBJECT family triggers no Q-code (c0392/c0393 can_route_to_q=[]).")
+def test_c3_placebo_not_applicable():
+    """C3(Q-trigger): PLACEBO_SUBJECT family는 Q 없음 → 해당 없음(명시 skip)."""

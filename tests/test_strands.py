@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from src.orchestrator import COST, run_strand, dispatch, record_path, REGISTRY
+from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STRANDS = json.loads((PROJECT_ROOT / "spec" / "strands.json").read_text(encoding="utf-8"))
@@ -237,3 +238,133 @@ def test_d_s1_timezone_cut_vertex_negative():
     tz_issues가 meta에 있어도 c0312_ran 부재면 거부 — gate는 감지 '실행'이지 산출물 존재가 아님)."""
     with pytest.raises(RuntimeError):
         dispatch("c0313", _mixed_tz_df(), {"tz_issues": {"has_mixed_tz": True}})
+
+
+# ===== Phase 5 · Slice 4 — COVARIATE_LAYOUT family (c0380 DETECT + c0381 CLASSIFY; no Q)
+#       + 기구현 자산 c0121 PIVOT 활성화 (c0207 A7 axis 경유; GAP-16/21 종결) =====
+
+COV_MESS = [s for s in STRANDS if "c0380" in s["c_sequence"]]
+PIV = [s for s in STRANDS if "c0121" in s["c_sequence"]]
+COV_PAIR = ["c0380", "c0381"]
+ACTIVATION = ["c0380", "c0381", "c0207", "c0121"]
+
+
+def _wide_cov_df():
+    """wide 공변량(WT_V1,WT_V2) — c0380이 'wide' 감지 → c0121이 long으로 실제 pivot해야 활성화 증명."""
+    return pd.DataFrame({"ID": [1, 2], "WT_V1": [70, 55], "WT_V2": [68, 54]})
+
+
+def test_covariate_strand_count():
+    """COVARIATE_LAYOUT mess(c0380)를 지나는 strand 534개, 그중 wide pivot(c0121) 6개."""
+    assert len(COV_MESS) == 534
+    assert len(PIV) == 6
+
+
+def test_covariate_detection_precedes_fix_adjacent():
+    """D-S1+D-S2: 모든 534 strand에서 c0380이 c0381 직전(인접, canonical order)."""
+    for s in COV_MESS:
+        seq = s["c_sequence"]
+        assert "c0381" in seq, s["sc_id"]
+        assert seq.index("c0380") == seq.index("c0381") - 1, s["sc_id"]
+
+
+def test_covariate_family_cost_within_breakdown():
+    """family 한계비용(1+3=4)이 strand의 L-4->L-5 cost_breakdown에 포함된다."""
+    fam_cost = COST["c0380"] + COST["c0381"]
+    assert fam_cost == 4
+    for s in COV_MESS:
+        assert s["cost_breakdown"].get("L-4->L-5", 0) >= fam_cost, s["sc_id"]
+
+
+def test_covariate_classify_chain_dynamic():
+    """★ orchestrator가 c0380→c0381을 실행: wide 감지 + 분류 flag 명시 설정(silent no-op 0).
+    명시 2-c 시퀀스라 boundary 없음, cost=4, meta['cov_layout_classified']가 default(False) 아닌 True."""
+    rec = run_strand(COV_PAIR, _wide_cov_df(), {})
+    assert rec["actual_c_sequence"] == COV_PAIR
+    assert rec["boundary_at"] is None
+    assert rec["total_cost"] == 4
+    assert rec["meta"].get("cov_layout") == "wide"
+    assert rec["meta"].get("cov_layout_classified") is True
+
+
+def test_c0121_activation_chain_dynamic():
+    """★★ 전략 목표·GAP-16 종결: c0380이 생산한 cov_layout='wide'로 기구현 c0121이 실제 wide→long
+    pivot을 수행함을 orchestrator로 증명(c0207 A7 axis 경유). 휴면 자산(분기키 입력 부재) 활성화."""
+    rec = run_strand(ACTIVATION, _wide_cov_df(), {"covariate_state": "time-varying"})
+    assert rec["actual_c_sequence"] == ACTIVATION
+    assert rec["boundary_at"] is None
+    assert rec["total_cost"] == 11  # 1+3+3+4
+    # 분기키 cov_layout은 c0380(≠c0207)이 생산 — GAP-16 실효 detection.
+    assert rec["meta"].get("cov_layout") == "wide"
+    assert rec["meta"].get("a7_state") == "TIME-VARYING"
+    out = rec["df"]
+    # 실제 pivot: wide(WT_V1,WT_V2) → long(visit 컬럼 + WT 값 컬럼), 행수=subjects×visits=4, 비결측 보존.
+    assert "visit" in out.columns and "WT" in out.columns
+    assert len(out) == 4
+    assert set(out["visit"]) == {"V1", "V2"}
+    assert sorted(out["WT"].tolist()) == [54, 55, 68, 70]
+    record_path(rec, "slice4_covariate_activation")
+
+
+def test_d_s1_covariate_cut_vertex_negative():
+    """★ D-S1: detection(c0207) 없이 c0121(transform) dispatch → RuntimeError (활성화 chain cut-vertex;
+    cov_layout가 meta에 있어도 c0207_ran 부재면 거부 — gate는 axis classifier '실행' 보장)."""
+    with pytest.raises(RuntimeError):
+        dispatch("c0121", _wide_cov_df(), {"cov_layout": "wide"})
+
+
+# ===== Phase 5 · Slice 5 — PLACEBO_SUBJECT family (c0392 DETECT + c0393 CLASSIFY; no Q)
+#       자기완결: 하류 transform/활성화 없음(mess_catalog M103–105). slice 4와 동형이나 더 단순 =====
+
+PBO_MESS = [s for s in STRANDS if "c0392" in s["c_sequence"]]
+PBO_PAIR = ["c0392", "c0393"]
+
+
+def _placebo_df():
+    """AMT=0 위약 피험자(2) + 정상 dose — c0392가 has_placebo=True 감지 → c0393이 [2] 분류."""
+    return pd.DataFrame({"subject_id": [1, 2, 3], "dose_amount": [100, 0, 100]})
+
+
+def test_placebo_strand_count():
+    """PLACEBO_SUBJECT mess(c0392)를 지나는 strand 543개, c0393도 동수(쌍 공출현)."""
+    assert len(PBO_MESS) == 543
+    assert len([s for s in STRANDS if "c0393" in s["c_sequence"]]) == 543
+
+
+def test_placebo_detection_precedes_fix_adjacent():
+    """D-S1+D-S2: 모든 543 strand에서 c0392가 c0393 직전(인접, canonical order)."""
+    for s in PBO_MESS:
+        seq = s["c_sequence"]
+        assert "c0393" in seq, s["sc_id"]
+        assert seq.index("c0392") == seq.index("c0393") - 1, s["sc_id"]
+
+
+def test_placebo_family_cost_within_breakdown():
+    """family 한계비용(1+3=4)이 strand의 L-4->L-5 cost_breakdown에 포함된다."""
+    fam_cost = COST["c0392"] + COST["c0393"]
+    assert fam_cost == 4
+    for s in PBO_MESS:
+        assert s["cost_breakdown"].get("L-4->L-5", 0) >= fam_cost, s["sc_id"]
+
+
+def test_placebo_classify_chain_dynamic():
+    """★ orchestrator가 c0392→c0393을 실행: AMT=0 감지(has_placebo=True) + 위약 피험자 명시 산출
+    (placebo_subjects=[2], silent [] no-op 0). 명시 2-c 시퀀스라 boundary 없음, cost=4."""
+    rec = run_strand(PBO_PAIR, _placebo_df(), {})
+    assert rec["actual_c_sequence"] == PBO_PAIR
+    assert rec["boundary_at"] is None
+    assert rec["total_cost"] == 4
+    assert rec["meta"].get("has_placebo") is True
+    assert rec["meta"].get("placebo_subjects") == [2]
+    record_path(rec, "slice5_placebo")
+
+
+def test_d_s1_placebo_artifact_gate_negative():
+    """★ artifact-guard(GAP-27 동형): c0392 산출 has_placebo 없이 c0393 직접 실행 → success=False,
+    placebo_subjects 미설정. c0393은 detect라 orchestrator D-S1 gate(transform/route 대상) 비대상 —
+    impl이 has_placebo artifact를 직접 guard해 silent 통과 차단(slice 4 c0121 transform-gate RuntimeError와 대조)."""
+    meta = {}
+    result = classify_placebo_subject(_placebo_df(), meta)
+    assert result["success"] is False
+    assert result["route_to_q"] is None
+    assert meta.get("placebo_subjects") is None

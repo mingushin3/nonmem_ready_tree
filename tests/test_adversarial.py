@@ -43,6 +43,10 @@ from src.c_units.c0311_convert_time_format import convert_time_format
 from src.c_units.c0315_convert_time_anchor import convert_time_anchor
 from src.c_units.c0312_detect_timezone import detect_timezone
 from src.c_units.c0313_normalize_timezone import normalize_timezone
+from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
+from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
+from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
+from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 
 
 class TestC0340Adversarial:
@@ -2550,3 +2554,187 @@ class TestC0313Adversarial:
         assert result["success"] is True
         assert list(result["df"]["time_value"]) == [0.0, 1.5]
         assert meta.get("tz_normalized") is True
+
+
+class TestC0380Adversarial:
+    """c0380 adversarial traps: 공변량 레이아웃 silent 오판·날조 차단."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP)."""
+        df = pd.DataFrame({"ID": [1, 2], "WT_V1": [70, 55], "WT_V2": [68, 54]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_covariate_layout(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_wide_not_silent_none(self):
+        """비-covariate 접미사(DOSE_AMT) 혼재 속 covariate wide(AGE_V1,AGE_V2)를 'none' silent 오판 금지."""
+        df = pd.DataFrame({"ID": [1], "AGE_V1": [45], "AGE_V2": [46], "DOSE_AMT": [100]})
+        result = detect_covariate_layout(df, {})
+        assert result["cov_layout"] == "wide"
+
+    def test_long_not_misread_as_wide(self):
+        """plain covariate 단일 컬럼(WT) → 'long'(visit 반복 부재인데 'wide' 날조 금지)."""
+        df = pd.DataFrame({"ID": [1, 2], "WT": [70, 55]})
+        result = detect_covariate_layout(df, {})
+        assert result["cov_layout"] == "long"
+
+    def test_no_covariate_not_invented(self):
+        """covariate 컬럼 전무([ID,TIME,DV]) → 'none'(wide/long 날조 금지)."""
+        df = pd.DataFrame({"ID": [1, 2], "TIME": [0, 24], "DV": [10.0, 5.0]})
+        result = detect_covariate_layout(df, {})
+        assert result["cov_layout"] == "none"
+
+    def test_noncov_suffix_not_counted_wide(self):
+        """non-covariate 접미사 컬럼(DV_1,DV_2)을 wide로 오집계 금지(false positive 차단) → 'none'."""
+        df = pd.DataFrame({"ID": [1], "DV_1": [10.0], "DV_2": [5.0]})
+        result = detect_covariate_layout(df, {})
+        assert result["cov_layout"] == "none"
+
+    def test_postcond_cov_layout_in_set(self):
+        """postcond: meta.get('cov_layout') in ['wide','long','none'] — 항상 유효값 기록."""
+        meta = {}
+        detect_covariate_layout(pd.DataFrame({"WT_V1": [70], "WT_V2": [68]}), meta)
+        assert meta.get("cov_layout") in ["wide", "long", "none"]
+
+
+class TestC0381Adversarial:
+    """c0381 adversarial traps: 공변량 레이아웃 분류 vacuous/silent no-op 차단 (GAP-27)."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect(분류) → df 변경 금지(SRP). meta만 기록."""
+        df = pd.DataFrame({"ID": [1, 2], "WT": [70, 55]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        classify_covariate_layout_mess(df, {"cov_layout": "wide"})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_vacuous_flag_not_set_when_detection_missing(self):
+        """★ GAP-27 ③: cov_layout(c0380 산출) 부재 시 default-False postcond를 우회한 silent 통과 금지
+        → success=False, route_to_q=None(Q 날조 금지), flag 미설정."""
+        df = pd.DataFrame({"ID": [1]})
+        meta = {}
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get("cov_layout_classified") is not True
+
+    def test_invalid_cov_layout_not_classified(self):
+        """무효 cov_layout('sideways') → vacuous 분류 금지: success=False, flag 미설정."""
+        df = pd.DataFrame({"ID": [1]})
+        meta = {"cov_layout": "sideways"}
+        result = classify_covariate_layout_mess(df, meta)
+        assert result["success"] is False
+        assert meta.get("cov_layout_classified") is not True
+
+    def test_valid_layout_flag_explicitly_set(self):
+        """cov_layout='wide' → flag를 default(False)가 아닌 명시 True로 설정."""
+        meta = {"cov_layout": "wide"}
+        result = classify_covariate_layout_mess(pd.DataFrame({"ID": [1]}), meta)
+        assert result["cov_layout_classified"] is True
+        assert meta.get("cov_layout_classified") is True
+
+    def test_none_layout_idempotent_but_flagged(self):
+        """cov_layout='none'(공변량 불요) → 정당한 분류, flag 명시 set(부재≠silent no-op)."""
+        meta = {"cov_layout": "none"}
+        result = classify_covariate_layout_mess(pd.DataFrame({"ID": [1]}), meta)
+        assert result["success"] is True
+        assert meta.get("cov_layout_classified") is True
+
+
+class TestC0392Adversarial:
+    """c0392 adversarial traps: 위약 감지 silent 오판·날조 차단 (AMT=0 vs 누락 구분)."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect → df 변경 금지(SRP). meta만 기록."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, 0]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        detect_placebo_subject(df, {})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_amt_zero_detected_not_silent_false(self):
+        """AMT=0(피험자 2) 존재 → has_placebo=True (False 하드코딩 vacuous 통과 차단)."""
+        df = pd.DataFrame({"subject_id": [1, 2, 3], "dose_amount": [100, 0, 100]})
+        result = detect_placebo_subject(df, {})
+        assert result["has_placebo"] is True
+
+    def test_missing_dose_not_mistaken_for_placebo(self):
+        """dose 누락(NaN)만 있고 실제 AMT=0 없음 → has_placebo=False (누락≠위약, M105 구분)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, None]})
+        result = detect_placebo_subject(df, {})
+        assert result["has_placebo"] is False
+
+    def test_no_dose_column_not_invented(self):
+        """dose_amount 컬럼 전무 → has_placebo=False(위약 날조 금지, graceful)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "TIME": [0, 24]})
+        result = detect_placebo_subject(df, {})
+        assert result["has_placebo"] is False
+
+    def test_string_zero_dose_detected(self):
+        """raw 문자열 dose '0'도 AMT=0으로 감지(to_numeric coerce) → has_placebo=True."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": ["100", "0"]})
+        result = detect_placebo_subject(df, {})
+        assert result["has_placebo"] is True
+
+    def test_postcond_has_placebo_is_bool(self):
+        """postcond: isinstance(meta.get('has_placebo'), bool) — numpy.bool_ 누출 금지(파이썬 bool)."""
+        meta = {}
+        detect_placebo_subject(pd.DataFrame({"subject_id": [1], "dose_amount": [0]}), meta)
+        assert isinstance(meta.get("has_placebo"), bool)
+
+
+class TestC0393Adversarial:
+    """c0393 adversarial traps: 위약 분류 vacuous/silent no-op 차단 (GAP-27)."""
+
+    def test_df_readonly_not_modified(self):
+        """kind=detect(분류) → df 변경 금지(SRP). meta만 기록."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, 0]})
+        original_cols = list(df.columns)
+        original_shape = df.shape
+        classify_placebo_subject(df, {"has_placebo": True})
+        assert list(df.columns) == original_cols
+        assert df.shape == original_shape
+
+    def test_subjects_not_set_when_detection_missing(self):
+        """★ GAP-27 ③: detection(c0392) 산출 has_placebo 부재 시 silent 통과 금지
+        → success=False, route_to_q=None(Q 날조 금지), placebo_subjects 미설정."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, 0]})
+        meta = {}
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] is False
+        assert result["route_to_q"] is None
+        assert meta.get("placebo_subjects") is None
+
+    def test_non_bool_has_placebo_not_classified(self):
+        """무효 has_placebo(bool 아님) → vacuous 분류 금지: success=False, placebo_subjects 미설정."""
+        df = pd.DataFrame({"subject_id": [1], "dose_amount": [0]})
+        meta = {"has_placebo": "yes"}
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] is False
+        assert meta.get("placebo_subjects") is None
+
+    def test_real_placebo_subjects_not_silent_empty(self):
+        """has_placebo=True + 실제 AMT=0 피험자[3,7] → placebo_subjects=[3,7](silent [] no-op 차단)."""
+        df = pd.DataFrame({"subject_id": [3, 5, 7], "dose_amount": [0, 100, 0]})
+        meta = {"has_placebo": True}
+        result = classify_placebo_subject(df, meta)
+        assert result["placebo_subjects"] == [3, 7]
+        assert meta.get("placebo_subjects") == [3, 7]
+
+    def test_no_placebo_empty_list_legit(self):
+        """has_placebo=False(위약 없음) → placebo_subjects=[] 정당한 빈 분류, success(부재≠silent no-op)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dose_amount": [100, 100]})
+        meta = {"has_placebo": False}
+        result = classify_placebo_subject(df, meta)
+        assert result["success"] is True
+        assert meta.get("placebo_subjects") == []
+
+    def test_postcond_placebo_subjects_is_list(self):
+        """postcond: isinstance(meta.get('placebo_subjects'), list) — 분류 산출은 항상 list."""
+        meta = {"has_placebo": True}
+        classify_placebo_subject(pd.DataFrame({"subject_id": [2], "dose_amount": [0]}), meta)
+        assert isinstance(meta.get("placebo_subjects"), list)
