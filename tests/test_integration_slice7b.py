@@ -48,7 +48,8 @@ MESS46 = sorted(c for c in BLOCKERS if CUNITS[c]["layer_pair"] == "L-4->L-5")
 # D1 정규화 대상 8c — orchestrator가 fn(df,meta)로 호출하는 호출규약과 정합되어야 함.
 GAP29_C = ["c0001", "c0010", "c0011", "c0012", "c0014", "c0016", "c0017", "c0018"]
 
-ROUTE_C = {"c0251", "c0253"}
+# terminal 키를 반환하는 ROUTE c (slice 2/6 = c0251/c0253; slice 8 Batch A = +6 axis-fail ROUTE).
+ROUTE_C = {"c0251", "c0253", "c0250", "c0252", "c0254", "c0255", "c0256", "c0257"}
 
 
 def _complete_if(extra):
@@ -68,30 +69,33 @@ def _neutral_df():
 # ===== 전제 반증: wiring 천장 도달 =====
 
 def test_wiring_ceiling_reached():
-    """★ falsifiable: 구현 c 집합 == REGISTRY 배선 집합(46==46) → 미배선-구현 c = 0.
-    즉 'wiring만으로 더 열 strand 없음' = 7b 발주 전제(배선) 반증."""
+    """★ falsifiable: 구현 c 집합 == REGISTRY 배선 집합 → 미배선-구현 c = 0(slice 8: 52==52).
+    slice 7b=46 → slice 8(Batch A 6 ROUTE 구현+배선)=52. 여전히 unwired-implemented = 0."""
     assert IMPL == REG, IMPL ^ REG
-    assert len(REG) == 46
+    assert len(REG) == 52
     assert [c for c in IMPL if c not in REG] == []
 
 
-def test_completing_now_173_post_normalization():
-    """GAP-29 정규화 후에도 완주 = 173(7a와 동일) — 정규화가 완주 집합을 바꾸지 않음."""
-    assert len(COMPLETING) == 173
+def test_completing_now_353_post_batch_a():
+    """완주 strand: slice 7b(GAP-29 정규화)=173 → slice 8(Batch A: 6 ROUTE c)=353.
+    Batch A는 완주 집합을 +180(=A1 139 + A2 41) 증가시킨다(column-path 백로그 누적곡선)."""
+    assert len(COMPLETING) == 353
 
 
 # ===== 프런티어: 27 upstream → 467, 73 → 5000 =====
 
 def test_upstream27_yields_467():
-    """★ falsifiable: 상류 column-path 27c를 구현+배선하면 완주 = 정확히 467(=7b 목표).
-    27c는 L-1→L-2 + L-2→L-3 + L-3→L-4 blocking c 전수."""
-    assert len(UPSTREAM27) == 27
+    """★ falsifiable: 남은 상류 column-path blocking c를 마저 구현+배선하면 완주 = 정확히 467.
+    slice 8(Batch A) 후 남은 upstream blocker = 21(=27 − 6 ROUTE 완료). _complete_if는 REG∪남은21 =
+    전체 27 상류 배선 = 467로 불변(프런티어가 27→21로 이동, 목표값 467 고정)."""
+    assert len(UPSTREAM27) == 21
     assert _complete_if(UPSTREAM27) == 467
 
 
 def test_all73_blockers_yield_5000():
-    """★ falsifiable: 전체 73 blocking c(27 upstream + 46 mess) 구현+배선 시 완주 = 5000(전수)."""
-    assert len(BLOCKERS) == 73
+    """★ falsifiable: 남은 blocking c 전부 구현+배선 시 완주 = 5000(전수). slice 8 후 남은 blocker =
+    67(=73 − 6 ROUTE 완료) = 21 upstream + 46 mess. _complete_if(REG∪남은67)=전체 73 배선=5000 불변."""
+    assert len(BLOCKERS) == 67
     assert len(MESS46) == 46
     assert _complete_if(BLOCKERS) == 5000
 
@@ -102,10 +106,11 @@ def test_all_blockers_unimplemented():
 
 
 def test_upstream_layer_decomposition():
-    """백로그 정합: upstream 27c의 layer_pair 분해 = L-1→L-2 4 + L-2→L-3 12 + L-3→L-4 11."""
+    """백로그 정합: 남은 upstream c의 layer_pair 분해. slice 8(Batch A: L-3→L-4 ROUTE 6 완료) 후
+    = L-1→L-2 4 + L-2→L-3 12 + L-3→L-4 5(=11 − 6)."""
     from collections import Counter
     lp = Counter(CUNITS[c]["layer_pair"] for c in UPSTREAM27)
-    assert lp == {"L-1->L-2": 4, "L-2->L-3": 12, "L-3->L-4": 11}, dict(lp)
+    assert lp == {"L-1->L-2": 4, "L-2->L-3": 12, "L-3->L-4": 5}, dict(lp)
 
 
 # ===== GAP-29 정규화 회귀가드 =====
@@ -144,12 +149,14 @@ def test_gap29_backward_compatible_single_arg():
 
 # ===== ①/② 불변: 7b는 ①/②를 바꾸지 않음(27c가 안 건드림) =====
 
-def test_terminal_realization_still_starved_unchanged():
-    """★ ① 불변: 완주 173에서 meta 미주입 시 기대-q 실현 여전히 0(7a와 동일).
-    27c 구현 백로그는 완주 경로만 열 뿐, ①(외부 meta 주입 규약) 결손은 그대로다."""
+def test_terminal_realization_partial_post_batch_a():
+    """★ slice 8(GAP-30 영향 노트 갱신): 7b는 '완주 strand 기대-q 실현 0 · 7a와 불변'이라 했으나 Batch A로
+    falsifiable 갱신 — 완주 353 중 88(c0250 74×Q11 + c0252 14×Q08)이 meta 미주입에도 실현한다(c0200/c0204의
+    df-default가 fail-state). ① 자체는 미해소: 나머지 ROUTE 종착 strand는 meta 부재로 mis-realize/INVALID-starve
+    되며 그 규모가 ① 결손을 측정한다(measure-not-fix — 본 수치 변화가 갱신 신호). 상세 분해는 slice 8 하네스."""
     runs = [(s, run_strand(s["c_sequence"], _neutral_df(), {})) for s in COMPLETING]
     realized = [s["sc_id"] for s, rec in runs if s["q_code"] and rec["q_code"] == s["q_code"]]
-    assert realized == [], realized
+    assert len(realized) == 88, len(realized)
 
 
 def test_d_s4_runtime_isolated_still_unchanged():

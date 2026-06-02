@@ -28,6 +28,7 @@ falsifiable하게 고정(characterization)한다 — 이것이 7b 착수 전 알
 """
 
 import json
+from collections import Counter
 from pathlib import Path
 
 import pandas as pd
@@ -40,7 +41,8 @@ CUNITS = {c["c_id"]: c for c in
           json.loads((PROJECT_ROOT / "spec" / "c_units.json").read_text(encoding="utf-8"))}
 
 AXIS = [f"c02{n:02d}" for n in range(0, 11)]      # A0–A10 평가자 c0200..c0210
-ROUTE_C = {"c0251", "c0253"}                       # 현재 terminal 키를 반환하는 ROUTE c
+# terminal 키를 반환하는 ROUTE c (slice 2/6 = c0251/c0253; slice 8 Batch A = +6 axis-fail ROUTE).
+ROUTE_C = {"c0251", "c0253", "c0250", "c0252", "c0254", "c0255", "c0256", "c0257"}
 NEW_BACKBONE = [                                    # slice 7a가 배선한 23c
     "c0200", "c0201", "c0202", "c0204", "c0206", "c0208", "c0209", "c0210",
     "c0001", "c0010", "c0011", "c0012", "c0013", "c0014", "c0015", "c0016",
@@ -76,27 +78,32 @@ def _run_all():
 # ===== 완주 규모 =====
 
 def test_completing_count():
-    """slice 7a 배선 후 완주(no SliceBoundary) strand = 정확히 173 (falsifiable, 예상치 일치)."""
-    assert len(COMPLETING) == 173
+    """완주(no SliceBoundary) strand 수. slice 7a=173 → slice 8(Batch A: 6 ROUTE c 배선)=353
+    (falsifiable, column_path_implementation_backlog.md 누적곡선 일치)."""
+    assert len(COMPLETING) == 353
 
 
 def test_completing_split_by_last_c():
-    """완주 173의 종착 구조: ROUTE c 종착 105(c0251 73 + c0253 32) + axis 종착 68(c0210 64 + c0201 4)."""
+    """완주 353의 종착 구조: ROUTE c 종착 285 + axis 종착 68(c0210 64 + c0201 4).
+    ROUTE 285 = slice 2/6 (c0251 73 + c0253 32 = 105) + slice 8 Batch A (180)."""
     route_last = [s for s in COMPLETING if s["c_sequence"][-1] in ROUTE_C]
     axis_last = [s for s in COMPLETING if s["c_sequence"][-1] not in ROUTE_C]
-    assert len(route_last) == 105
+    assert len(route_last) == 285
     assert len(axis_last) == 68
     assert sum(s["c_sequence"][-1] == "c0251" for s in route_last) == 73
     assert sum(s["c_sequence"][-1] == "c0253" for s in route_last) == 32
+    batch_a = {"c0250": 74, "c0252": 65, "c0254": 11, "c0255": 15, "c0256": 2, "c0257": 13}
+    for c, n in batch_a.items():
+        assert sum(s["c_sequence"][-1] == c for s in route_last) == n, c
 
 
 # ===== 핵심: actual == best (구조적), 예외 0 =====
 
 def test_actual_equals_best_structural():
-    """★ Phase 5 핵심 불변식(처음 규모 검증): 완주 173 전부 best c_sequence를 그대로 실행하고
-    SliceBoundary 없이 종료한다. 실현 terminal 여부와 무관하게 sequence 동치 173/173."""
+    """★ Phase 5 핵심 불변식(규모 검증): 완주 strand 전부 best c_sequence를 그대로 실행하고
+    SliceBoundary 없이 종료한다. 실현 terminal 여부와 무관하게 sequence 동치(slice 8: 353/353)."""
     runs = _run_all()
-    assert len(runs) == 173
+    assert len(runs) == 353
     for s, rec in runs:
         assert rec["boundary_at"] is None, s["sc_id"]
         assert rec["actual_c_sequence"] == s["c_sequence"], s["sc_id"]
@@ -157,13 +164,18 @@ def test_c1_axis_covered_by_completing_strands():
 
 # ===== ★ 깨지는 불변식 (1): terminal 실현 GAP — 외부 meta 주입(①) =====
 
-def test_terminal_realization_starved_without_meta():
-    """★ falsifiable BREAK: meta 미주입 시 기대-QUARANTINE 완주 strand 중 기대 q를 실현하는 것 0개.
-    ROUTE c가 축-state 부재로 default INVALID 라우팅 → 외부 meta 주입(① GAP-4/6/7/9/10/11/12/14) 필요.
-    (meta 주입 slice에서 >0으로 바뀌면 본 characterization이 falsify되어 갱신 신호가 된다.)"""
+def test_terminal_realization_partial_without_meta():
+    """★ slice 8 갱신(발견 2 / GAP-30 영향 노트): slice 7a/7b에서 'meta 미주입 → 기대-q 실현 0'이었으나
+    Batch A로 falsify — 완주 353 중 88(c0250 74×Q11 + c0252 14×Q08)이 meta 미주입에도 실현한다.
+    c0200/c0204가 '선언 부재'를 fail-state(AIC-MISSING / MISSING-NO-POLICY)로 해석하므로 df-default가
+    fail인 A0/A4의 ROUTE c는 외부 meta 없이 실현한다(realization=0은 c0251/c0253처럼 df-default가 pass인
+    backbone-only 특성이었음). ① 자체는 미해소 — 나머지 ROUTE 종착 strand는 mis-realize/INVALID-starve로
+    ① 결손 규모를 측정한다(slice 8 하네스 test_realization_breakdown 참조). meta 주입은 여전히 ① 소관."""
     runs = _run_all()
-    realized = [s["sc_id"] for s, rec in runs if s["q_code"] and rec["q_code"] == s["q_code"]]
-    assert realized == [], realized
+    realized = [s for s, rec in runs if s["q_code"] and rec["q_code"] == s["q_code"]]
+    assert len(realized) == 88, len(realized)
+    by_lastc = Counter(s["c_sequence"][-1] for s in realized)
+    assert dict(by_lastc) == {"c0250": 74, "c0252": 14}, dict(by_lastc)
 
 
 def test_route_realizes_expected_q_with_meta():

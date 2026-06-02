@@ -50,6 +50,13 @@ from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 from src.c_units.c0305_detect_blq_token import detect_blq_token_mess
 from src.c_units.c0306_normalize_blq_token import normalize_blq_token
 from src.c_units.c0253_route_blq_token import route_blq_token
+# slice 8 — Batch A: L-3->L-4 axis-fail ROUTE c
+from src.c_units.c0250_route_column_schema import route_column_schema
+from src.c_units.c0252_route_amt import route_amt
+from src.c_units.c0254_route_covariate_layout import route_covariate_layout
+from src.c_units.c0255_route_analyte_column import route_analyte_column
+from src.c_units.c0256_route_cross_column_invariant import route_cross_column_invariant
+from src.c_units.c0257_route_row_ordering import route_row_ordering
 
 
 class TestC0340Adversarial:
@@ -2341,6 +2348,164 @@ class TestC0251Adversarial:
         result = route_time_format(pd.DataFrame({"time_value": [0.0]}), {"a3_state": "AMBIGUOUS"})
         assert result["terminal"] == "QUARANTINE"
         assert result["terminal"] not in (None, "AUTO")
+
+
+class TestC0250Adversarial:
+    """c0250 adversarial traps: A0 fail-state 라우팅 silent 오라우팅 차단 (단일 fail-state → Q11)."""
+
+    def test_aic_missing_routes_q11(self):
+        """AIC-MISSING → Q11 (QUARANTINE)."""
+        result = route_column_schema(pd.DataFrame({"ID": [1]}), {"a0_state": "AIC-MISSING"})
+        assert result["routing_decision"] == "Q11"
+        assert result["q_code"] == "Q11"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_pass_state_not_routed(self):
+        """★ unconditional-Q11(snippet 'routing=Q11') 차단: pass-state는 Q11 금지 → INVALID."""
+        for state in ("AIC-PK", "AIC-POPPK", "AIC-PKPD"):
+            result = route_column_schema(pd.DataFrame({"ID": [1]}), {"a0_state": state})
+            assert result["routing_decision"] == "INVALID", state
+            assert result["q_code"] is None, state
+
+    def test_missing_state_routes_invalid_not_q11(self):
+        """meta에 a0_state 부재 시 silent Q11 금지 → INVALID."""
+        result = route_column_schema(pd.DataFrame({"ID": [1]}), {})
+        assert result["routing_decision"] == "INVALID"
+        assert result["q_code"] is None
+
+
+class TestC0252Adversarial:
+    """c0252 adversarial traps: A4 fail-state 라우팅 silent 오라우팅 차단 (Q08/Q14/INVALID)."""
+
+    def test_missing_no_policy_routes_q08(self):
+        """MISSING-NO-POLICY → Q08 (Q14/INVALID로 오라우팅 금지)."""
+        result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "MISSING-NO-POLICY"})
+        assert result["routing_decision"] == "Q08"
+        assert result["q_code"] == "Q08"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_addl_actual_conflict_routes_q14_not_q08(self):
+        """ADDL-ACTUAL-CONFLICT → Q14 (Q08로 분기 혼동 오라우팅 금지)."""
+        result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "ADDL-ACTUAL-CONFLICT"})
+        assert result["routing_decision"] == "Q14"
+        assert result["q_code"] == "Q14"
+
+    def test_unrecoverable_routes_invalid_not_q(self):
+        """UNRECOVERABLE → INVALID (Q08/Q14로 silent 승격 금지; SSOT 174 strand)."""
+        result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "UNRECOVERABLE"})
+        assert result["routing_decision"] == "INVALID"
+        assert result["q_code"] is None
+
+    def test_infusion_stop_restart_routes_invalid_not_q04(self):
+        """★ GAP-31: INFUSION-STOP-RESTART는 strands SSOT상 Q04이나 Q04∉postcond → INVALID로
+        postcond-faithful 라우팅(Q04로 silent 라우팅 금지). divergence는 Phase 7 D-S4 이월(GAP-28 동형)."""
+        result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "INFUSION-STOP-RESTART"})
+        assert result["routing_decision"] == "INVALID"
+        assert result["routing_decision"] != "Q04"
+        assert result["q_code"] is None
+
+    def test_routing_decision_in_postcond_set(self):
+        """postcond: routing_decision ∈ {Q08,Q14,INVALID} (precond 3-state + INFUSION 방어)."""
+        for state in ("MISSING-NO-POLICY", "ADDL-ACTUAL-CONFLICT", "UNRECOVERABLE", "INFUSION-STOP-RESTART"):
+            result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": state})
+            assert result["routing_decision"] in ["Q08", "Q14", "INVALID"], state
+
+
+class TestC0254Adversarial:
+    """c0254 adversarial traps: A7 fail-state 라우팅 silent 오라우팅 차단 (Q07/Q13)."""
+
+    def test_policy_missing_routes_q07(self):
+        """POLICY-MISSING → Q07 (Q13으로 오라우팅 금지)."""
+        result = route_covariate_layout(pd.DataFrame({"WT": [70]}), {"a7_state": "POLICY-MISSING"})
+        assert result["routing_decision"] == "Q07"
+        assert result["q_code"] == "Q07"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_key_missing_routes_q13_not_q07(self):
+        """KEY-MISSING → Q13 (Q07로 분기 혼동 오라우팅 금지)."""
+        result = route_covariate_layout(pd.DataFrame({"WT": [70]}), {"a7_state": "KEY-MISSING"})
+        assert result["routing_decision"] == "Q13"
+        assert result["q_code"] == "Q13"
+
+    def test_pass_state_routes_invalid_not_q07(self):
+        """★ naive 'else Q07' 차단: pass-state는 Q07로 silent 라우팅 금지 → INVALID."""
+        for state in ("NONE-REQUIRED", "BASELINE-CLEAN", "TIME-VARYING"):
+            result = route_covariate_layout(pd.DataFrame({"WT": [70]}), {"a7_state": state})
+            assert result["routing_decision"] == "INVALID", state
+            assert result["q_code"] is None, state
+
+
+class TestC0255Adversarial:
+    """c0255 adversarial traps: A8 fail-state 라우팅 silent 오라우팅 차단 (단일 fail-state → Q09)."""
+
+    def test_cmt_policy_missing_routes_q09(self):
+        """CMT-POLICY-MISSING → Q09 (QUARANTINE)."""
+        result = route_analyte_column(pd.DataFrame({"DV": [0.5]}), {"a8_state": "CMT-POLICY-MISSING"})
+        assert result["routing_decision"] == "Q09"
+        assert result["q_code"] == "Q09"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_pass_state_not_routed(self):
+        """★ unconditional-Q09 차단: pass-state는 Q09 금지 → INVALID."""
+        for state in ("SINGLE-DRUG", "MULTI-CMT-DEFINED", "METABOLITE-DEFINED"):
+            result = route_analyte_column(pd.DataFrame({"DV": [0.5]}), {"a8_state": state})
+            assert result["routing_decision"] == "INVALID", state
+            assert result["q_code"] is None, state
+
+
+class TestC0256Adversarial:
+    """c0256 adversarial traps: A9 fail-state 라우팅 silent 오라우팅 차단 (Q06/Q15D/INVALID)."""
+
+    def test_protocol_deviation_no_policy_routes_q06(self):
+        """PROTOCOL-DEVIATION-NO-POLICY → Q06 (Q15D/INVALID로 오라우팅 금지)."""
+        result = route_cross_column_invariant(pd.DataFrame({"EVID": [1]}), {"a9_state": "PROTOCOL-DEVIATION-NO-POLICY"})
+        assert result["routing_decision"] == "Q06"
+        assert result["q_code"] == "Q06"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_reanalysis_final_missing_routes_q15d_not_q06(self):
+        """REANALYSIS-FINAL-MISSING → Q15D (Q06로 분기 혼동 오라우팅 금지)."""
+        result = route_cross_column_invariant(pd.DataFrame({"EVID": [0]}), {"a9_state": "REANALYSIS-FINAL-MISSING"})
+        assert result["routing_decision"] == "Q15D"
+        assert result["q_code"] == "Q15D"
+
+    def test_irreconcilable_routes_invalid_not_q(self):
+        """IRRECONCILABLE → INVALID (Q06/Q15D로 silent 승격 금지; SSOT 30 strand)."""
+        result = route_cross_column_invariant(pd.DataFrame({"EVID": [1]}), {"a9_state": "IRRECONCILABLE"})
+        assert result["routing_decision"] == "INVALID"
+        assert result["q_code"] is None
+
+    def test_routing_decision_in_postcond_set(self):
+        """postcond: routing_decision ∈ {Q06,Q15D,INVALID} (precond 3-state 전부)."""
+        for state in ("PROTOCOL-DEVIATION-NO-POLICY", "REANALYSIS-FINAL-MISSING", "IRRECONCILABLE"):
+            result = route_cross_column_invariant(pd.DataFrame({"EVID": [1]}), {"a9_state": state})
+            assert result["routing_decision"] in ["Q06", "Q15D", "INVALID"], state
+
+
+class TestC0257Adversarial:
+    """c0257 adversarial traps: A6 fail-state 라우팅 silent 오라우팅 차단 (Q03/Q04)."""
+
+    def test_ambiguous_routes_q04(self):
+        """AMBIGUOUS → Q04 (Q03으로 오라우팅 금지)."""
+        result = route_row_ordering(pd.DataFrame({"ID": [1]}), {"a6_state": "AMBIGUOUS"})
+        assert result["routing_decision"] == "Q04"
+        assert result["q_code"] == "Q04"
+        assert result["terminal"] == "QUARANTINE"
+
+    def test_q03_states_route_q03_not_q04(self):
+        """★ snippet 'routing=Q04' 무시: 4개 비-AMBIGUOUS fail-state → Q03 (Q04로 silent 라우팅 금지;
+        postcond·can_route_to_q·strands SSOT, c0251 선례)."""
+        for state in ("COVARIATE-CHANGE", "RESET-NEEDED", "SAME-TIME-RESOLVABLE", "SEPARABLE"):
+            result = route_row_ordering(pd.DataFrame({"ID": [1]}), {"a6_state": state})
+            assert result["routing_decision"] == "Q03", state
+            assert result["routing_decision"] != "Q04", state
+            assert result["q_code"] == "Q03", state
+
+    def test_pass_state_routes_invalid(self):
+        """★ over-broad 차단: pass a6-state(URINE-INTERVAL)는 Q03/Q04 어느 쪽으로도 silent 라우팅 금지 → INVALID."""
+        result = route_row_ordering(pd.DataFrame({"ID": [1]}), {"a6_state": "URINE-INTERVAL"})
+        assert result["routing_decision"] == "INVALID"
+        assert result["q_code"] is None
 
 
 class TestC0310Adversarial:

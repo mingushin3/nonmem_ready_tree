@@ -91,6 +91,19 @@ from src.c_units.c0022_assign_baseline_covariate import assign_baseline_covariat
 from src.c_units.c0023_assign_time_varying_covariate import assign_time_varying_covariate as assign_time_varying_covariate_c0023
 from src.c_units.c0140_assign_baseline_covariate import assign_baseline_covariate as assign_baseline_covariate_c0140
 from src.c_units.c0141_assign_time_varying_covariate import assign_time_varying_covariate as assign_time_varying_covariate_c0141
+# ===== slice 8 — Batch A: L-3->L-4 axis-fail ROUTE c (column-path 백로그 최고 레버리지) =====
+#   axis req_det(c0200/c0204/c0206/c0207/c0208/c0209)는 전부 slice 7a 기배선 → 신규 detection 불요.
+#   순수 ROUTE 구현+배선만으로 완주 173→312(A1)→353(A2). c0251/c0253 패턴 동형.
+#   ★ 발견(cite-verify): empty meta에서도 c0200→AIC-MISSING·c0204→MISSING-NO-POLICY(df-default가 fail-state)라
+#     c0250(74×Q11)·c0252(14×Q08)가 외부 meta 없이 부분 실현(GAP-30 ① 영향 노트 갱신; backbone-only 특성 아님).
+#   ★ GAP-31: c0252는 strands SSOT상 INFUSION-STOP-RESTART→Q04이나 Q04∉postcond → default INVALID(postcond-faithful),
+#     SSOT↔postcond divergence는 Phase 7 D-S4 이월(GAP-28 동형). c0257 Q03 4-state는 postcond 내 → clean(c0251 선례).
+from src.c_units.c0250_route_column_schema import route_column_schema
+from src.c_units.c0252_route_amt import route_amt
+from src.c_units.c0254_route_covariate_layout import route_covariate_layout
+from src.c_units.c0255_route_analyte_column import route_analyte_column
+from src.c_units.c0256_route_cross_column_invariant import route_cross_column_invariant
+from src.c_units.c0257_route_row_ordering import route_row_ordering
 
 _CUNITS_PATH = PROJECT_ROOT / "spec" / "c_units.json"
 _CUNITS = json.loads(_CUNITS_PATH.read_text(encoding="utf-8"))
@@ -166,6 +179,13 @@ REGISTRY = {
     "c0023": ("transform", assign_time_varying_covariate_c0023), # L-1→L-2
     "c0140": ("transform", assign_baseline_covariate_c0140),     # L-2→L-3
     "c0141": ("transform", assign_time_varying_covariate_c0141), # L-2→L-3
+    # ===== slice 8 — Batch A: L-3->L-4 axis-fail ROUTE c (46→52). D-S1 gate: req_det axis가 strand 내 선행 =====
+    "c0250": ("route", route_column_schema),          # A0 → Q11 (reqdet c0200, 기배선)
+    "c0252": ("route", route_amt),                    # A4 → Q08/Q14/INVALID (reqdet c0204; GAP-31 INFUSION→INVALID)
+    "c0254": ("route", route_covariate_layout),       # A7 → Q07/Q13 (reqdet c0207)
+    "c0255": ("route", route_analyte_column),         # A8 → Q09 (reqdet c0208)
+    "c0256": ("route", route_cross_column_invariant), # A9 → Q06/Q15D/INVALID (reqdet c0209)
+    "c0257": ("route", route_row_ordering),           # A6 → Q04/Q03 (reqdet c0206; Q03 4-state c0251 선례)
 }
 
 

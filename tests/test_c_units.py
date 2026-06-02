@@ -50,6 +50,13 @@ from src.c_units.c0393_classify_placebo_subject import classify_placebo_subject
 from src.c_units.c0305_detect_blq_token import detect_blq_token_mess
 from src.c_units.c0306_normalize_blq_token import normalize_blq_token
 from src.c_units.c0253_route_blq_token import route_blq_token
+# slice 8 — Batch A: L-3->L-4 axis-fail ROUTE c (c0251/c0253 동형)
+from src.c_units.c0250_route_column_schema import route_column_schema
+from src.c_units.c0252_route_amt import route_amt
+from src.c_units.c0254_route_covariate_layout import route_covariate_layout
+from src.c_units.c0255_route_analyte_column import route_analyte_column
+from src.c_units.c0256_route_cross_column_invariant import route_cross_column_invariant
+from src.c_units.c0257_route_row_ordering import route_row_ordering
 
 
 class TestC0340:
@@ -3700,6 +3707,286 @@ class TestC0251:
         assert result["routing_decision"] != "INVALID"
         assert result["routing_decision"] == "Q12"
         assert result["q_code"] == "Q12"
+
+
+class TestC0250:
+    """c0250 — A0 실패 라우팅 (ROUTE COLUMN_SCHEMA)
+
+    postcondition_predicate:
+        routing_decision == 'Q11'
+
+    srp_intent: ROUTE COLUMN_SCHEMA
+    kind: route
+    requires_detection_by: c0200
+    can_route_to_q: ['Q11']
+    매핑(SSOT strands.json 720 last-c 전부 (QUARANTINE,Q11) + q_codes Q11):
+      AIC-MISSING→Q11. 그 외(precond 밖 pass-state)→INVALID(default, c0253 ABSENT 선례 동형).
+    A0는 단일 fail-state라 can_route_to_q=[Q11] == 실제 라우팅(GAP 없음).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a0_state=AIC-MISSING → Q11 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0250", "happy")
+        result = route_column_schema(df, meta)
+        assert result["routing_decision"] == 'Q11'
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """라우팅은 meta 기반(df-agnostic): df 형태가 달라도 a0_state=AIC-MISSING → Q11."""
+        df, meta, expected = load_fixture_with_meta("c0250", "edge")
+        result = route_column_schema(df, meta)
+        assert result["routing_decision"] == 'Q11'
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ unconditional-Q11(snippet 'routing=Q11') 차단: pass-state(AIC-PK)를 Q11로 silent
+        라우팅 금지 → INVALID(precond 밖 방어)."""
+        df, meta, expected = load_fixture_with_meta("c0250", "trap")
+        result = route_column_schema(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["terminal"] == "INVALID"
+        assert result["q_code"] is None
+
+
+class TestC0252:
+    """c0252 — A4 실패 라우팅 (ROUTE AMT)
+
+    postcondition_predicate:
+        routing_decision in ['Q08', 'Q14', 'INVALID']
+
+    srp_intent: ROUTE AMT
+    kind: route
+    requires_detection_by: c0204
+    can_route_to_q: ['Q08', 'Q14']
+    매핑(SSOT strands.json + q_codes): MISSING-NO-POLICY→Q08, ADDL-ACTUAL-CONFLICT→Q14,
+      UNRECOVERABLE→INVALID(default). 그 외→INVALID(default).
+    ★ GAP-31: strands.json은 INFUSION-STOP-RESTART→Q04(168 strand)이나 Q04 ∉ postcond
+      ['Q08','Q14','INVALID']이라 postcond-faithful하게 INVALID(default)로 라우팅한다
+      (c0251 'Q12∈postcond' 선례와 달리 Q04∉postcond → 산문/SSOT 채택 불가). SSOT↔postcond
+      divergence는 Phase 7 D-S4 conditional-edge 재구성 이월(provenance_gaps.md GAP-31, GAP-28 동형).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a4_state=MISSING-NO-POLICY → Q08 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0252", "happy")
+        result = route_amt(df, meta)
+        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """a4_state=ADDL-ACTUAL-CONFLICT → Q14 (QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0252", "edge")
+        result = route_amt(df, meta)
+        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ GAP-31: INFUSION-STOP-RESTART는 SSOT상 Q04이나 Q04∉postcond → INVALID로 postcond-faithful
+        라우팅(Q04로 silent 승격 금지). SSOT↔postcond divergence는 Phase 7 D-S4 이월."""
+        df, meta, expected = load_fixture_with_meta("c0252", "trap")
+        result = route_amt(df, meta)
+        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] == "INVALID"
+        assert result["routing_decision"] != "Q04"
+        assert result["q_code"] is None
+
+    def test_unrecoverable_invalid(self):
+        """declared precond state UNRECOVERABLE → INVALID (SSOT 174 strand; Q로 silent 승격 금지)."""
+        r = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "UNRECOVERABLE"})
+        assert r["routing_decision"] == "INVALID"
+        assert r["q_code"] is None
+
+    def test_declared_q_states_mapped(self):
+        """★ 불완전 매핑 차단: 선언 fail-state가 정확한 Q로(MISSING-NO-POLICY→Q08, ADDL-ACTUAL-CONFLICT→Q14)."""
+        assert route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": "MISSING-NO-POLICY"})["q_code"] == "Q08"
+        assert route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": "ADDL-ACTUAL-CONFLICT"})["q_code"] == "Q14"
+
+
+class TestC0254:
+    """c0254 — A7 실패 라우팅 (ROUTE COVARIATE_LAYOUT)
+
+    postcondition_predicate:
+        routing_decision in ['Q07', 'Q13']
+
+    srp_intent: ROUTE COVARIATE_LAYOUT
+    kind: route
+    requires_detection_by: c0207
+    can_route_to_q: ['Q07', 'Q13']
+    매핑(SSOT strands.json + q_codes): POLICY-MISSING→Q07(108), KEY-MISSING→Q13(98).
+      그 외(pass-state)→INVALID(default 방어; naive 'else Q07' 차단). can_route_to_q == 실제 라우팅(GAP 없음).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a7_state=POLICY-MISSING → Q07 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0254", "happy")
+        result = route_covariate_layout(df, meta)
+        assert result["routing_decision"] in ['Q07', 'Q13']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """a7_state=KEY-MISSING → Q13 (Q07로 분기 혼동 금지)."""
+        df, meta, expected = load_fixture_with_meta("c0254", "edge")
+        result = route_covariate_layout(df, meta)
+        assert result["routing_decision"] in ['Q07', 'Q13']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ naive 'else Q07' 차단: pass-state(NONE-REQUIRED)를 Q07로 silent 라우팅 금지 → INVALID."""
+        df, meta, expected = load_fixture_with_meta("c0254", "trap")
+        result = route_covariate_layout(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["terminal"] == "INVALID"
+        assert result["q_code"] is None
+
+
+class TestC0255:
+    """c0255 — A8 실패 라우팅 (ROUTE ANALYTE_COLUMN)
+
+    postcondition_predicate:
+        routing_decision == 'Q09'
+
+    srp_intent: ROUTE ANALYTE_COLUMN
+    kind: route
+    requires_detection_by: c0208
+    can_route_to_q: ['Q09']
+    매핑(SSOT strands.json 239 last-c 전부 (QUARANTINE,Q09) + q_codes Q09):
+      CMT-POLICY-MISSING→Q09. 그 외(pass-state)→INVALID(default 방어). A8 단일 fail-state(GAP 없음).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a8_state=CMT-POLICY-MISSING → Q09 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0255", "happy")
+        result = route_analyte_column(df, meta)
+        assert result["routing_decision"] == 'Q09'
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """라우팅은 meta 기반(df-agnostic): df 형태가 달라도 CMT-POLICY-MISSING → Q09."""
+        df, meta, expected = load_fixture_with_meta("c0255", "edge")
+        result = route_analyte_column(df, meta)
+        assert result["routing_decision"] == 'Q09'
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ unconditional-Q09(snippet 'routing=Q09') 차단: pass-state(SINGLE-DRUG)를 Q09로 silent
+        라우팅 금지 → INVALID."""
+        df, meta, expected = load_fixture_with_meta("c0255", "trap")
+        result = route_analyte_column(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["terminal"] == "INVALID"
+        assert result["q_code"] is None
+
+
+class TestC0256:
+    """c0256 — A9 실패 라우팅 (ROUTE CROSS_COLUMN_INVARIANT)
+
+    postcondition_predicate:
+        routing_decision in ['Q06', 'Q15D', 'INVALID']
+
+    srp_intent: ROUTE CROSS_COLUMN_INVARIANT
+    kind: route
+    requires_detection_by: c0209
+    can_route_to_q: ['Q06', 'Q15D']
+    매핑(SSOT strands.json + q_codes): PROTOCOL-DEVIATION-NO-POLICY→Q06(26),
+      REANALYSIS-FINAL-MISSING→Q15D(22), IRRECONCILABLE→INVALID(default; 30). 그 외→INVALID(default).
+    IRRECONCILABLE→INVALID: universe_sm상 ->INVALID이며 c0209는 분류만(route_to_q=None), INVALID 종착은
+    본 ROUTE c 책임(c0209 docstring 정합). spec snippet과 SSOT 정합(GAP 없음).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a9_state=PROTOCOL-DEVIATION-NO-POLICY → Q06 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0256", "happy")
+        result = route_cross_column_invariant(df, meta)
+        assert result["routing_decision"] in ['Q06', 'Q15D', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """a9_state=REANALYSIS-FINAL-MISSING → Q15D (QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0256", "edge")
+        result = route_cross_column_invariant(df, meta)
+        assert result["routing_decision"] in ['Q06', 'Q15D', 'INVALID']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ IRRECONCILABLE을 Q06/Q15D로 silent 승격 금지 → INVALID(q_code=None) (SSOT 30 strand)."""
+        df, meta, expected = load_fixture_with_meta("c0256", "trap")
+        result = route_cross_column_invariant(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["terminal"] == "INVALID"
+        assert result["q_code"] is None
+
+
+class TestC0257:
+    """c0257 — A6 실패 라우팅 (ROUTE ROW_ORDERING)
+
+    postcondition_predicate:
+        routing_decision in ['Q03', 'Q04']
+
+    srp_intent: ROUTE ROW_ORDERING
+    kind: route
+    requires_detection_by: c0206
+    can_route_to_q: ['Q03', 'Q04']
+    매핑(SSOT strands.json + q_codes): AMBIGUOUS→Q04(124),
+      {COVARIATE-CHANGE,RESET-NEEDED,SAME-TIME-RESOLVABLE,SEPARABLE}→Q03(10). 그 외(URINE-INTERVAL 등
+      pass-state)→INVALID(default 방어).
+    ★ precond(a6_state=='AMBIGUOUS')·snippet('routing=Q04')는 Q04만 산문화하나, can_route_to_q=[Q03,Q04]·
+      postcond in ['Q03','Q04']가 Q03을 허용하고 strands SSOT가 4 state→Q03(10 strand)을 확정한다. 따라서
+      c0251 선례(산문/precond 무시·postcond+SSOT 우선)대로 Q03 state를 구현한다. Q03 ∈ postcond이라 GAP 불요
+      (Q04∉postcond인 c0252 INFUSION-STOP-RESTART의 GAP-31과 대조).
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """a6_state=AMBIGUOUS → Q04 (terminal QUARANTINE)."""
+        df, meta, expected = load_fixture_with_meta("c0257", "happy")
+        result = route_row_ordering(df, meta)
+        assert result["routing_decision"] in ['Q03', 'Q04']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["terminal"] == expected["terminal"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_edge(self, load_fixture_with_meta):
+        """★ snippet 'routing=Q04' 무시: 비-AMBIGUOUS fail-state(SAME-TIME-RESOLVABLE) → Q03
+        (postcond·can_route_to_q·strands SSOT; c0251 선례)."""
+        df, meta, expected = load_fixture_with_meta("c0257", "edge")
+        result = route_row_ordering(df, meta)
+        assert result["routing_decision"] in ['Q03', 'Q04']
+        assert result["routing_decision"] == expected["routing_decision"]
+        assert result["q_code"] == expected["q_code"]
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ unconditional-Q04(snippet) & over-broad-Q03 차단: pass a6-state(URINE-INTERVAL)는
+        Q04/Q03 어느 쪽으로도 silent 라우팅 금지 → INVALID(precond 밖 방어)."""
+        df, meta, expected = load_fixture_with_meta("c0257", "trap")
+        result = route_row_ordering(df, meta)
+        assert result["routing_decision"] == "INVALID"
+        assert result["routing_decision"] != "Q04"
+        assert result["q_code"] is None
+
+    def test_all_q03_states_mapped(self):
+        """★ 불완전 매핑 차단: Q03 4-state 전부 Q03로(일부만 매핑 후 나머지 누락 금지)."""
+        for st in ("COVARIATE-CHANGE", "RESET-NEEDED", "SAME-TIME-RESOLVABLE", "SEPARABLE"):
+            r = route_row_ordering(pd.DataFrame({"ID": [1]}), {"a6_state": st})
+            assert r["routing_decision"] == "Q03", st
+            assert r["q_code"] == "Q03", st
+
+    def test_ambiguous_maps_q04(self):
+        """AMBIGUOUS → Q04 (Q03 4-state와 분기 혼동 금지)."""
+        r = route_row_ordering(pd.DataFrame({"ID": [1]}), {"a6_state": "AMBIGUOUS"})
+        assert r["routing_decision"] == "Q04"
+        assert r["q_code"] == "Q04"
 
 
 class TestC0310:
