@@ -3760,25 +3760,25 @@ class TestC0252:
     """c0252 — A4 실패 라우팅 (ROUTE AMT)
 
     postcondition_predicate:
-        routing_decision in ['Q08', 'Q14', 'INVALID']
+        routing_decision in ['Q04', 'Q08', 'Q14', 'INVALID']
 
     srp_intent: ROUTE AMT
     kind: route
     requires_detection_by: c0204
-    can_route_to_q: ['Q08', 'Q14']
+    can_route_to_q: ['Q08', 'Q14', 'Q04']
     매핑(SSOT strands.json + q_codes): MISSING-NO-POLICY→Q08, ADDL-ACTUAL-CONFLICT→Q14,
-      UNRECOVERABLE→INVALID(default). 그 외→INVALID(default).
-    ★ GAP-31: strands.json은 INFUSION-STOP-RESTART→Q04(168 strand)이나 Q04 ∉ postcond
-      ['Q08','Q14','INVALID']이라 postcond-faithful하게 INVALID(default)로 라우팅한다
-      (c0251 'Q12∈postcond' 선례와 달리 Q04∉postcond → 산문/SSOT 채택 불가). SSOT↔postcond
-      divergence는 Phase 7 D-S4 conditional-edge 재구성 이월(provenance_gaps.md GAP-31, GAP-28 동형).
+      INFUSION-STOP-RESTART→Q04, UNRECOVERABLE→INVALID(default). 그 외→INVALID(default).
+    ★ GAP-31 RESOLVED (Phase 7 결정 A, 사용자 승인): INFUSION-STOP-RESTART→Q04(168 strand)를
+      precond·postcond·can_route_to_q·매핑에 정합 반영(cite: universe_sm §3 A4 '無 Q04', q_codes
+      Q04.trigger 'A4=INFUSION-STOP-RESTART AND policy 부재'). 이제 Q04 ∈ postcond이므로 INVALID
+      default fallthrough가 아니다(c0251 'Q12∈postcond→SSOT 채택' 선례 동형). strands↔spec divergence 해소.
     """
 
     def test_happy(self, load_fixture_with_meta):
         """a4_state=MISSING-NO-POLICY → Q08 (terminal QUARANTINE)."""
         df, meta, expected = load_fixture_with_meta("c0252", "happy")
         result = route_amt(df, meta)
-        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] in ['Q04', 'Q08', 'Q14', 'INVALID']
         assert result["routing_decision"] == expected["routing_decision"]
         assert result["terminal"] == expected["terminal"]
         assert result["q_code"] == expected["q_code"]
@@ -3787,19 +3787,20 @@ class TestC0252:
         """a4_state=ADDL-ACTUAL-CONFLICT → Q14 (QUARANTINE)."""
         df, meta, expected = load_fixture_with_meta("c0252", "edge")
         result = route_amt(df, meta)
-        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] in ['Q04', 'Q08', 'Q14', 'INVALID']
         assert result["routing_decision"] == expected["routing_decision"]
         assert result["q_code"] == expected["q_code"]
 
     def test_trap(self, load_fixture_with_meta):
-        """★ GAP-31: INFUSION-STOP-RESTART는 SSOT상 Q04이나 Q04∉postcond → INVALID로 postcond-faithful
-        라우팅(Q04로 silent 승격 금지). SSOT↔postcond divergence는 Phase 7 D-S4 이월."""
+        """★ GAP-31 RESOLVED (결정 A): INFUSION-STOP-RESTART → Q04 (SSOT 168 strand). 이제 Q04 ∈
+        postcond이므로 INVALID default fallthrough가 아니라 Q04로 정확 라우팅(silent INVALID 회귀 금지)."""
         df, meta, expected = load_fixture_with_meta("c0252", "trap")
         result = route_amt(df, meta)
-        assert result["routing_decision"] in ['Q08', 'Q14', 'INVALID']
-        assert result["routing_decision"] == "INVALID"
-        assert result["routing_decision"] != "Q04"
-        assert result["q_code"] is None
+        assert result["routing_decision"] in ['Q04', 'Q08', 'Q14', 'INVALID']
+        assert result["routing_decision"] == "Q04"
+        assert result["routing_decision"] != "INVALID"
+        assert result["q_code"] == "Q04"
+        assert result["routing_decision"] == expected["routing_decision"]
 
     def test_unrecoverable_invalid(self):
         """declared precond state UNRECOVERABLE → INVALID (SSOT 174 strand; Q로 silent 승격 금지)."""
@@ -3808,9 +3809,17 @@ class TestC0252:
         assert r["q_code"] is None
 
     def test_declared_q_states_mapped(self):
-        """★ 불완전 매핑 차단: 선언 fail-state가 정확한 Q로(MISSING-NO-POLICY→Q08, ADDL-ACTUAL-CONFLICT→Q14)."""
+        """★ 불완전 매핑 차단: 선언 fail-state가 정확한 Q로(MISSING-NO-POLICY→Q08, ADDL-ACTUAL-CONFLICT→Q14, INFUSION-STOP-RESTART→Q04)."""
         assert route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": "MISSING-NO-POLICY"})["q_code"] == "Q08"
         assert route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": "ADDL-ACTUAL-CONFLICT"})["q_code"] == "Q14"
+        assert route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": "INFUSION-STOP-RESTART"})["q_code"] == "Q04"
+
+    def test_unmapped_state_defaults_invalid(self):
+        """silent-error trap: 매핑 외/미상 state는 INVALID default(q_code None) — 임의 Q로 silent 승격 금지."""
+        for bad in ["COMPLETE", None]:
+            r = route_amt(pd.DataFrame({"AMT": [1]}), {"a4_state": bad})
+            assert r["routing_decision"] == "INVALID", bad
+            assert r["q_code"] is None, bad
 
 
 class TestC0254:

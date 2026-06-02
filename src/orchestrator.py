@@ -96,8 +96,9 @@ from src.c_units.c0141_assign_time_varying_covariate import assign_time_varying_
 #   순수 ROUTE 구현+배선만으로 완주 173→312(A1)→353(A2). c0251/c0253 패턴 동형.
 #   ★ 발견(cite-verify): empty meta에서도 c0200→AIC-MISSING·c0204→MISSING-NO-POLICY(df-default가 fail-state)라
 #     c0250(74×Q11)·c0252(14×Q08)가 외부 meta 없이 부분 실현(GAP-30 ① 영향 노트 갱신; backbone-only 특성 아님).
-#   ★ GAP-31: c0252는 strands SSOT상 INFUSION-STOP-RESTART→Q04이나 Q04∉postcond → default INVALID(postcond-faithful),
-#     SSOT↔postcond divergence는 Phase 7 D-S4 이월(GAP-28 동형). c0257 Q03 4-state는 postcond 내 → clean(c0251 선례).
+#   ★ GAP-31 RESOLVED (Phase 7 결정 A): c0252 precond/postcond/can_route_to_q/매핑에 INFUSION-STOP-RESTART→Q04 정합
+#     (cite universe_sm §3 A4 '無 Q04'). strands↔spec divergence 해소. 단 실현(168)은 c0204 verify가 INFUSION을
+#     fail-route해야 하므로 ① 재배선 범위(미해소). c0257 Q03 4-state는 postcond 내 → clean(c0251 선례).
 from src.c_units.c0250_route_column_schema import route_column_schema
 from src.c_units.c0252_route_amt import route_amt
 from src.c_units.c0254_route_covariate_layout import route_covariate_layout
@@ -190,7 +191,7 @@ REGISTRY = {
     "c0141": ("transform", assign_time_varying_covariate_c0141), # L-2→L-3
     # ===== slice 8 — Batch A: L-3->L-4 axis-fail ROUTE c (46→52). D-S1 gate: req_det axis가 strand 내 선행 =====
     "c0250": ("route", route_column_schema),          # A0 → Q11 (reqdet c0200, 기배선)
-    "c0252": ("route", route_amt),                    # A4 → Q08/Q14/INVALID (reqdet c0204; GAP-31 INFUSION→INVALID)
+    "c0252": ("route", route_amt),                    # A4 → Q04/Q08/Q14/INVALID (reqdet c0204; GAP-31 RESOLVED: INFUSION→Q04)
     "c0254": ("route", route_covariate_layout),       # A7 → Q07/Q13 (reqdet c0207)
     "c0255": ("route", route_analyte_column),         # A8 → Q09 (reqdet c0208)
     "c0256": ("route", route_cross_column_invariant), # A9 → Q06/Q15D/INVALID (reqdet c0209)

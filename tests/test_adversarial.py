@@ -2380,7 +2380,7 @@ class TestC0250Adversarial:
 
 
 class TestC0252Adversarial:
-    """c0252 adversarial traps: A4 fail-state 라우팅 silent 오라우팅 차단 (Q08/Q14/INVALID)."""
+    """c0252 adversarial traps: A4 fail-state 라우팅 silent 오라우팅 차단 (Q04/Q08/Q14/INVALID)."""
 
     def test_missing_no_policy_routes_q08(self):
         """MISSING-NO-POLICY → Q08 (Q14/INVALID로 오라우팅 금지)."""
@@ -2401,19 +2401,20 @@ class TestC0252Adversarial:
         assert result["routing_decision"] == "INVALID"
         assert result["q_code"] is None
 
-    def test_infusion_stop_restart_routes_invalid_not_q04(self):
-        """★ GAP-31: INFUSION-STOP-RESTART는 strands SSOT상 Q04이나 Q04∉postcond → INVALID로
-        postcond-faithful 라우팅(Q04로 silent 라우팅 금지). divergence는 Phase 7 D-S4 이월(GAP-28 동형)."""
+    def test_infusion_stop_restart_routes_q04_not_invalid(self):
+        """★ GAP-31 RESOLVED (결정 A): INFUSION-STOP-RESTART → Q04 (SSOT 168 strand; cite universe_sm
+        §3 A4 '無 Q04'). INVALID default fallthrough로 silent 회귀 금지."""
         result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": "INFUSION-STOP-RESTART"})
-        assert result["routing_decision"] == "INVALID"
-        assert result["routing_decision"] != "Q04"
-        assert result["q_code"] is None
+        assert result["routing_decision"] == "Q04"
+        assert result["routing_decision"] != "INVALID"
+        assert result["q_code"] == "Q04"
+        assert result["terminal"] == "QUARANTINE"
 
     def test_routing_decision_in_postcond_set(self):
-        """postcond: routing_decision ∈ {Q08,Q14,INVALID} (precond 3-state + INFUSION 방어)."""
-        for state in ("MISSING-NO-POLICY", "ADDL-ACTUAL-CONFLICT", "UNRECOVERABLE", "INFUSION-STOP-RESTART"):
+        """postcond: routing_decision ∈ {Q04,Q08,Q14,INVALID} (precond 4-state)."""
+        for state in ("MISSING-NO-POLICY", "ADDL-ACTUAL-CONFLICT", "INFUSION-STOP-RESTART", "UNRECOVERABLE"):
             result = route_amt(pd.DataFrame({"AMT": [100]}), {"a4_state": state})
-            assert result["routing_decision"] in ["Q08", "Q14", "INVALID"], state
+            assert result["routing_decision"] in ["Q04", "Q08", "Q14", "INVALID"], state
 
 
 class TestC0254Adversarial:
