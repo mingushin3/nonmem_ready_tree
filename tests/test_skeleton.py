@@ -224,3 +224,22 @@ def test_blq_route_q_targets_reachable():
     c0253 실제 라우팅 {Q01,Q15D,INVALID} ⊋ can_route_to_q=[Q01] — Q15D/INVALID는 D-S4 재구성(GAP-28)."""
     assert any(s.get("q_code") == "Q01" for s in STRANDS)
     assert any(s.get("q_code") == "Q15D" and s["c_sequence"][-1] == "c0253" for s in STRANDS)
+
+
+# ===== slice 9 — Batch B (L-3->L-4 axis DETECT/VERIFY) =====
+
+def test_batch_b_c_layer_assignment():
+    """slice 9 Batch B 축 DETECT/VERIFY(c0211/c0212/c0214/c0215/c0216) = 전부 L-3->L-4 (D-S3 골격 정합)."""
+    for c in ["c0211", "c0212", "c0214", "c0215", "c0216"]:
+        assert CUNITS[c]["layer_pair"] == "L-3->L-4", c
+
+
+def test_batch_b_can_route_to_q_is_d_s4_declaration():
+    """★ D-S4(GAP-30/32): Batch B detect/verify의 can_route_to_q는 *선언*이지 runtime 라우터 아님.
+    c0211/c0212=[Q01](runtime 라우터=c0253) · c0214=[Q10](Q10 ROUTE c 부재 → 미실현 ②) · c0215/c0216=[].
+    cite-verify — terminal 키 미반환이므로 신규 고립 Q-terminal을 만들지 않는다(Phase 7 conditional-edge 소관)."""
+    assert CUNITS["c0211"]["can_route_to_q"] == ["Q01"]
+    assert CUNITS["c0212"]["can_route_to_q"] == ["Q01"]
+    assert CUNITS["c0214"]["can_route_to_q"] == ["Q10"]
+    assert CUNITS["c0215"]["can_route_to_q"] == []
+    assert CUNITS["c0216"]["can_route_to_q"] == []

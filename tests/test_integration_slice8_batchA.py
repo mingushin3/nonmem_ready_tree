@@ -36,7 +36,12 @@ A1 = {"c0250", "c0252"}
 AXIS = [f"c02{n:02d}" for n in range(0, 11)]      # A0–A10 평가자 c0200..c0210
 ROUTE_C = {"c0251", "c0253"} | BATCH_A             # terminal 키를 반환하는 ROUTE c 전체
 
-REG = set(REGISTRY.keys())
+# ★ slice 8 = Batch A milestone 기록. 이후 slice 9(Batch B) 등이 REGISTRY를 확장해도 본 milestone
+#   수치(완주 353 · NEW_BATCH_A 180 · ① 88/64/28)는 고정이어야 하므로, 의도적으로 Batch B 이후 c를
+#   제외한 'slice 8 시점 REGISTRY 스냅샷'에서 완주를 유도한다(왜 REGISTRY 전체를 안 쓰는가 = milestone freeze).
+#   살아있는 프런티어 추적은 slice 7a/7b(bump)·slice 9(live)가 담당. (tracker=bump, milestone=freeze 구분.)
+_LATER_SLICES = {"c0211", "c0212", "c0214", "c0215", "c0216"}  # slice 9 Batch B — milestone 보존 위해 제외
+REG = set(REGISTRY.keys()) - _LATER_SLICES
 COMPLETING = [s for s in STRANDS if all(c in REG for c in s["c_sequence"])]
 # 신규 완주 = Batch A ROUTE c로 종착(6 c는 slice 8에서 처음 배선됨 → 이전엔 SliceBoundary로 미완주).
 NEW_BATCH_A = [s for s in COMPLETING if s["c_sequence"][-1] in BATCH_A]

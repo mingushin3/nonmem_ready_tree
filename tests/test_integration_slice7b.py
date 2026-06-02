@@ -69,33 +69,33 @@ def _neutral_df():
 # ===== 전제 반증: wiring 천장 도달 =====
 
 def test_wiring_ceiling_reached():
-    """★ falsifiable: 구현 c 집합 == REGISTRY 배선 집합 → 미배선-구현 c = 0(slice 8: 52==52).
-    slice 7b=46 → slice 8(Batch A 6 ROUTE 구현+배선)=52. 여전히 unwired-implemented = 0."""
+    """★ falsifiable: 구현 c 집합 == REGISTRY 배선 집합 → 미배선-구현 c = 0(slice 9: 57==57).
+    slice 7b=46 → slice 8(Batch A 6 ROUTE)=52 → slice 9(Batch B 5 DETECT/VERIFY)=57. unwired-implemented = 0."""
     assert IMPL == REG, IMPL ^ REG
-    assert len(REG) == 52
+    assert len(REG) == 57
     assert [c for c in IMPL if c not in REG] == []
 
 
-def test_completing_now_353_post_batch_a():
-    """완주 strand: slice 7b(GAP-29 정규화)=173 → slice 8(Batch A: 6 ROUTE c)=353.
-    Batch A는 완주 집합을 +180(=A1 139 + A2 41) 증가시킨다(column-path 백로그 누적곡선)."""
-    assert len(COMPLETING) == 353
+def test_completing_now_439_post_batch_b():
+    """완주 strand: slice 8(Batch A 6 ROUTE)=353 → slice 9(Batch B 5 DETECT/VERIFY)=439(+86).
+    Batch B는 L-3->L-4 축 평가자를 배선해 완주 path를 열고 L-3->L-4 층을 전부 완성한다(백로그 누적곡선)."""
+    assert len(COMPLETING) == 439
 
 
 # ===== 프런티어: 27 upstream → 467, 73 → 5000 =====
 
 def test_upstream27_yields_467():
     """★ falsifiable: 남은 상류 column-path blocking c를 마저 구현+배선하면 완주 = 정확히 467.
-    slice 8(Batch A) 후 남은 upstream blocker = 21(=27 − 6 ROUTE 완료). _complete_if는 REG∪남은21 =
-    전체 27 상류 배선 = 467로 불변(프런티어가 27→21로 이동, 목표값 467 고정)."""
-    assert len(UPSTREAM27) == 21
+    slice 9(Batch B 5 DET/VER) 후 남은 upstream blocker = 16(=27 − 6 ROUTE − 5 DET/VER). _complete_if는
+    REG∪남은16 = 전체 27 상류 배선 = 467로 불변(프런티어가 21→16으로 이동, 목표값 467 고정)."""
+    assert len(UPSTREAM27) == 16
     assert _complete_if(UPSTREAM27) == 467
 
 
 def test_all73_blockers_yield_5000():
-    """★ falsifiable: 남은 blocking c 전부 구현+배선 시 완주 = 5000(전수). slice 8 후 남은 blocker =
-    67(=73 − 6 ROUTE 완료) = 21 upstream + 46 mess. _complete_if(REG∪남은67)=전체 73 배선=5000 불변."""
-    assert len(BLOCKERS) == 67
+    """★ falsifiable: 남은 blocking c 전부 구현+배선 시 완주 = 5000(전수). slice 9 후 남은 blocker =
+    62(=73 − 6 ROUTE − 5 DET/VER) = 16 upstream + 46 mess. _complete_if(REG∪남은62)=전체 73 배선=5000 불변."""
+    assert len(BLOCKERS) == 62
     assert len(MESS46) == 46
     assert _complete_if(BLOCKERS) == 5000
 
@@ -106,11 +106,11 @@ def test_all_blockers_unimplemented():
 
 
 def test_upstream_layer_decomposition():
-    """백로그 정합: 남은 upstream c의 layer_pair 분해. slice 8(Batch A: L-3→L-4 ROUTE 6 완료) 후
-    = L-1→L-2 4 + L-2→L-3 12 + L-3→L-4 5(=11 − 6)."""
+    """백로그 정합: 남은 upstream c의 layer_pair 분해. slice 9(Batch B: L-3→L-4 DET/VER 5 완료) 후
+    L-3→L-4는 전부 완성(11 = 6 ROUTE + 5 DET/VER) → 남은 = L-1→L-2 4 + L-2→L-3 12."""
     from collections import Counter
     lp = Counter(CUNITS[c]["layer_pair"] for c in UPSTREAM27)
-    assert lp == {"L-1->L-2": 4, "L-2->L-3": 12, "L-3->L-4": 5}, dict(lp)
+    assert lp == {"L-1->L-2": 4, "L-2->L-3": 12}, dict(lp)
 
 
 # ===== GAP-29 정규화 회귀가드 =====
@@ -150,21 +150,23 @@ def test_gap29_backward_compatible_single_arg():
 # ===== ①/② 불변: 7b는 ①/②를 바꾸지 않음(27c가 안 건드림) =====
 
 def test_terminal_realization_partial_post_batch_a():
-    """★ slice 8(GAP-30 영향 노트 갱신): 7b는 '완주 strand 기대-q 실현 0 · 7a와 불변'이라 했으나 Batch A로
-    falsifiable 갱신 — 완주 353 중 88(c0250 74×Q11 + c0252 14×Q08)이 meta 미주입에도 실현한다(c0200/c0204의
-    df-default가 fail-state). ① 자체는 미해소: 나머지 ROUTE 종착 strand는 meta 부재로 mis-realize/INVALID-starve
-    되며 그 규모가 ① 결손을 측정한다(measure-not-fix — 본 수치 변화가 갱신 신호). 상세 분해는 slice 8 하네스."""
+    """★ GAP-30 영향 노트: Batch A로 '① 실현 0' 부분 falsify — 88(c0250 74×Q11 + c0252 14×Q08)이 meta
+    미주입에도 실현(c0200/c0204 df-default=fail). slice 9(Batch B)는 실현 0 추가(신규 86 = starve 40 +
+    axis-None 46) → 완주 439 중 여전히 88. ① 미해소: 나머지 ROUTE 종착 strand는 meta 부재로 mis/starve
+    (measure-not-fix). 상세 분해는 slice 8/9 하네스."""
     runs = [(s, run_strand(s["c_sequence"], _neutral_df(), {})) for s in COMPLETING]
     realized = [s["sc_id"] for s, rec in runs if s["q_code"] and rec["q_code"] == s["q_code"]]
     assert len(realized) == 88, len(realized)
 
 
-def test_d_s4_runtime_isolated_still_unchanged():
-    """★ ② 불변: axis evaluator 종착 strand는 여전히 terminal 미실현(68개, 그중 Q05 via c0201 4개).
-    Phase 7 D-S4 conditional-edge 재구성이 흡수할 결손 — 27c와 별개, 7b에서 수치 불변."""
+def test_d_s4_axis_terminal_grows_to_114_post_batch_b():
+    """★ ②(Phase 7 D-S4 소관): axis evaluator 종착 strand는 전부 terminal 미실현. Batch A 시점 68에서
+    slice 9(Batch B)가 c0210 종착 +46을 추가 → axis-only 종착 68→114(미실현 class 불변, count 증가).
+    그중 Q05 via c0201 4개 불변. ★ 27c 중 Batch B(축 DET/VER)는 ②를 건드린다(이전 'still unchanged'
+    전제 갱신 — 완주 path뿐 아니라 axis-only 종착도 늘린다); Phase 7 conditional-edge가 흡수할 결손."""
     runs = [(s, run_strand(s["c_sequence"], _neutral_df(), {})) for s in COMPLETING]
     axis_last = [(s, rec) for s, rec in runs if s["c_sequence"][-1] not in ROUTE_C]
-    assert len(axis_last) == 68
+    assert len(axis_last) == 114
     assert all(rec["terminal"] is None for s, rec in axis_last)
     q05 = [s for s, _ in axis_last if s["q_code"]]
     assert len(q05) == 4

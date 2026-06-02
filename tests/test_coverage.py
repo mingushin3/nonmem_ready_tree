@@ -221,3 +221,14 @@ def test_c3_q01_terminal_has_incoming_route_edge():
     assert BLQ_Q01_COV
     for s in BLQ_Q01_COV:
         assert s["c_sequence"][-1] == "c0253", s["sc_id"]
+
+
+# ===== slice 9 — Batch B (L-3->L-4 axis DETECT/VERIFY) =====
+BATCHB_NEW = ["c0211", "c0212", "c0214", "c0215", "c0216"]
+
+
+def test_c1_each_batch_b_c_in_at_least_one_strand():
+    """C1(DoD): Batch B 5 axis DETECT/VERIFY c 각각이 ≥1 strand에 등장(dead c 0; 중간 c라 last-c는 아님).
+    can_route_to_q는 Phase 7 D-S4 *선언*이라 runtime Q 미실현 — cite-verify는 test_skeleton.py."""
+    for c in BATCHB_NEW:
+        assert sum(c in s["c_sequence"] for s in STRANDS) >= 1, c

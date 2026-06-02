@@ -33,6 +33,11 @@ from src.c_units.c0206_classify_row_ordering import classify_row_ordering
 from src.c_units.c0207_classify_covariate_layout import classify_covariate_layout
 from src.c_units.c0209_verify_cross_column_invariant import verify_cross_column_invariant
 from src.c_units.c0210_detect_source_format import detect_source_format
+from src.c_units.c0211_detect_above_uloq import detect_above_uloq
+from src.c_units.c0212_detect_replicate_obs import detect_replicate_obs
+from src.c_units.c0214_verify_unit_declaration import verify_unit_declaration
+from src.c_units.c0215_detect_duplicate_row import detect_duplicate_row
+from src.c_units.c0216_detect_encoding import detect_encoding
 from src.c_units.c0340_detect_merged_cell import detect_merged_cell
 from src.c_units.c0341_propagate_merged_cell import propagate_merged_cell
 from src.c_units.c0213_verify_time_anchor import verify_time_anchor
@@ -3023,3 +3028,158 @@ class TestC0253Adversarial:
                    "BIOANALYTICAL-FINAL-FLAG-MISSING", "ABSENT"):
             result = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": st})
             assert result["routing_decision"] in ["Q01", "Q15D", "INVALID"]
+
+
+# ===== slice 9 — Batch B adversarial =====
+
+class TestC0211Adversarial:
+    """c0211 adversarial traps: 토큰 silent-miss · np.bool_ · 거짓양성 차단."""
+
+    def test_above_uloq_token_not_silently_missed(self):
+        """'>100' 토큰 → 반드시 True (uloq meta 없이 숫자비교만 하는 naive 감지기 차단)."""
+        df = pd.DataFrame({"dv_value": ["5.2", ">100", "4.8"]})
+        meta = {}
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] is True
+        assert result["route_to_q"] == "Q01"
+
+    def test_flag_is_python_bool_not_numpy(self):
+        """meta/result flag는 Python bool — numpy.bool_은 isinstance(.,bool)=False라 postcond 위반."""
+        df = pd.DataFrame({"dv_value": [5.2, 150.0, 4.8]})
+        meta = {"uloq": 100}
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] is True
+        assert isinstance(meta["has_above_uloq"], bool)
+        assert not isinstance(meta["has_above_uloq"], np.bool_)
+
+    def test_no_uloq_no_fabrication(self):
+        """clean 숫자 DV + uloq meta 부재 → False (없는 초과를 날조하지 않음)."""
+        df = pd.DataFrame({"dv_value": [5.2, 3.1, 4.8]})
+        meta = {}
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] is False
+        assert result["pass"] is True
+
+    def test_policy_present_repairs_no_q(self):
+        """초과 감지 + uloq_policy 존재 → ABOVE-ULOQ(REPAIR), route None (Q01로 silent 승격 금지)."""
+        df = pd.DataFrame({"dv_value": [5.2, 150.0, 4.8]})
+        meta = {"uloq": 100, "uloq_policy": "M3"}
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] is True
+        assert result["route_to_q"] is None
+        assert result["pass"] is True
+
+
+class TestC0212Adversarial:
+    """c0212 adversarial traps: exact-dup 오탐 · NaN 제외 · np.bool_ 차단."""
+
+    def test_exact_duplicate_not_replicate(self):
+        """전체 행 일치(DUPLICATE-EXACT) → replicate 아님(False) — naive groupby(len>=2) 오탐 차단."""
+        df = pd.DataFrame({"subject_id": [1, 1, 2], "time_value": [0, 0, 0], "dv_value": [5.2, 5.2, 4.8]})
+        meta = {}
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] is False
+        assert result["route_to_q"] is None
+
+    def test_distinct_dv_same_time_is_replicate(self):
+        """같은 (ID,TIME) 서로 다른 DV ≥2 → 정당 replicate(True) → Q01."""
+        df = pd.DataFrame({"subject_id": [1, 1], "time_value": [1, 1], "dv_value": [5.4, 5.6]})
+        meta = {}
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] is True
+        assert result["route_to_q"] == "Q01"
+
+    def test_nan_dv_not_counted(self):
+        """같은 (ID,TIME)이라도 유효 DV가 1개뿐(나머지 NaN)이면 replicate 아님(False)."""
+        df = pd.DataFrame({"subject_id": [1, 1], "time_value": [1, 1], "dv_value": [5.4, np.nan]})
+        meta = {}
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] is False
+        assert isinstance(meta["has_replicates"], bool)
+        assert not isinstance(meta["has_replicates"], np.bool_)
+
+    def test_missing_subject_id_no_crash(self):
+        """★ subject_id 컬럼 부재(runtime neutral df) → KeyError 없이 False (silent-error 0; precond 미충족 robust)."""
+        df = pd.DataFrame({"time_value": [0, 1, 0], "dv_value": [0.1, 0.2, 0.3]})
+        meta = {}
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] is False
+        assert result["route_to_q"] is None
+
+
+class TestC0215Adversarial:
+    """c0215 adversarial traps: replicate 오탐(직교) · np.bool_ 차단."""
+
+    def test_exact_dup_detected(self):
+        """전체 행 일치 → has_exact_duplicates=True (hardcoded-False 차단)."""
+        df = pd.DataFrame({"subject_id": [1, 1, 2], "time_value": [0, 0, 1], "dv_value": [5.2, 5.2, 3.1]})
+        meta = {}
+        result = detect_duplicate_row(df, meta)
+        assert result["has_exact_duplicates"] is True
+
+    def test_replicate_not_flagged_as_exact_dup(self):
+        """같은 (ID,TIME) 다른 DV(A5 replicate) → exact dup 아님(False) — c0212와 직교."""
+        df = pd.DataFrame({"subject_id": [1, 1, 2], "time_value": [0, 0, 1], "dv_value": [5.2, 5.4, 3.1]})
+        meta = {}
+        result = detect_duplicate_row(df, meta)
+        assert result["has_exact_duplicates"] is False
+        assert isinstance(meta["has_exact_duplicates"], bool)
+        assert not isinstance(meta["has_exact_duplicates"], np.bool_)
+
+
+class TestC0216Adversarial:
+    """c0216 adversarial traps: 비-ASCII 검출 · 숫자 거짓양성 · np.bool_ 차단."""
+
+    def test_non_ascii_value_detected(self):
+        """비-ASCII 값(cp949 '환자') → has_encoding_issues=True (hardcoded-False 차단)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "note": ["clean", "환자"]})
+        meta = {}
+        result = detect_encoding(df, meta)
+        assert result["has_encoding_issues"] is True
+
+    def test_numeric_only_no_false_positive(self):
+        """숫자 전용 df → str 캐스팅 후 ASCII뿐 → False (숫자를 인코딩 결함으로 오탐 차단)."""
+        df = pd.DataFrame({"subject_id": [1, 2], "dv_value": [5.2, 3.1]})
+        meta = {}
+        result = detect_encoding(df, meta)
+        assert result["has_encoding_issues"] is False
+        assert isinstance(meta["has_encoding_issues"], bool)
+        assert not isinstance(meta["has_encoding_issues"], np.bool_)
+
+
+class TestC0214Adversarial:
+    """c0214 adversarial traps: 부분 누락 silent-pass · df-default · declared override."""
+
+    def test_partial_unit_missing_routes_q10(self):
+        """units dict 존재하나 numeric 컬럼 일부 단위 누락 → incomplete=False → Q10
+        (naive 'units 키 존재 → complete' 차단)."""
+        df = pd.DataFrame({"dv_value": [5.2, 3.1], "wt": [70, 80]})
+        meta = {"units": {"dv_value": "mg/L"}}
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] is False
+        assert result["route_to_q"] == "Q10"
+
+    def test_df_default_fail_empty_meta(self):
+        """★ GAP-32: numeric 컬럼 존재 + empty meta(units 미선언) → incomplete=False → Q10
+        (c0213 scope-out-pass와 정반대 df-default=fail; SSOT 'unit 사전 불완전→Q10'에 충실)."""
+        df = pd.DataFrame({"dv_value": [5.2, 3.1], "wt": [70, 80]})
+        meta = {}
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] is False
+        assert result["route_to_q"] == "Q10"
+
+    def test_declared_override_wins(self):
+        """선언된 meta['unit_declaration_complete']=True가 units 미선언보다 우선(declared > 점검)."""
+        df = pd.DataFrame({"dv_value": [5.2, 3.1]})
+        meta = {"unit_declaration_complete": True}
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] is True
+        assert result["route_to_q"] is None
+
+    def test_no_numeric_cols_vacuous_pass(self):
+        """numeric 컬럼 부재(문자열 전용) → 점검 대상 없음 → complete=True (없는 누락 날조 금지)."""
+        df = pd.DataFrame({"note": ["a", "b"]})
+        meta = {}
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] is True
+        assert result["pass"] is True

@@ -78,22 +78,23 @@ def _run_all():
 # ===== 완주 규모 =====
 
 def test_completing_count():
-    """완주(no SliceBoundary) strand 수. slice 7a=173 → slice 8(Batch A: 6 ROUTE c 배선)=353
-    (falsifiable, column_path_implementation_backlog.md 누적곡선 일치)."""
-    assert len(COMPLETING) == 353
+    """완주(no SliceBoundary) strand 수. slice 7a=173 → slice 8(Batch A 6 ROUTE)=353 →
+    slice 9(Batch B 5 DETECT/VERIFY)=439 (falsifiable, 백로그 누적곡선 일치)."""
+    assert len(COMPLETING) == 439
 
 
 def test_completing_split_by_last_c():
-    """완주 353의 종착 구조: ROUTE c 종착 285 + axis 종착 68(c0210 64 + c0201 4).
-    ROUTE 285 = slice 2/6 (c0251 73 + c0253 32 = 105) + slice 8 Batch A (180)."""
+    """완주 439의 종착 구조: ROUTE c 종착 325 + axis 종착 114(c0210 110 + c0201 4).
+    slice 9(Batch B)가 route 종착 +40(c0253 +29·c0254 +4·c0255 +6·c0256 +1) + axis 종착 +46(c0210)."""
     route_last = [s for s in COMPLETING if s["c_sequence"][-1] in ROUTE_C]
     axis_last = [s for s in COMPLETING if s["c_sequence"][-1] not in ROUTE_C]
-    assert len(route_last) == 285
-    assert len(axis_last) == 68
+    assert len(route_last) == 325
+    assert len(axis_last) == 114
     assert sum(s["c_sequence"][-1] == "c0251" for s in route_last) == 73
-    assert sum(s["c_sequence"][-1] == "c0253" for s in route_last) == 32
-    batch_a = {"c0250": 74, "c0252": 65, "c0254": 11, "c0255": 15, "c0256": 2, "c0257": 13}
-    for c, n in batch_a.items():
+    assert sum(s["c_sequence"][-1] == "c0253" for s in route_last) == 61
+    # ROUTE c 종착 분포 (Batch A + slice 9 Batch B 누적)
+    route_by_last = {"c0250": 74, "c0252": 65, "c0254": 15, "c0255": 21, "c0256": 3, "c0257": 13}
+    for c, n in route_by_last.items():
         assert sum(s["c_sequence"][-1] == c for s in route_last) == n, c
 
 
@@ -101,9 +102,9 @@ def test_completing_split_by_last_c():
 
 def test_actual_equals_best_structural():
     """★ Phase 5 핵심 불변식(규모 검증): 완주 strand 전부 best c_sequence를 그대로 실행하고
-    SliceBoundary 없이 종료한다. 실현 terminal 여부와 무관하게 sequence 동치(slice 8: 353/353)."""
+    SliceBoundary 없이 종료한다. 실현 terminal 여부와 무관하게 sequence 동치(slice 9: 439/439)."""
     runs = _run_all()
-    assert len(runs) == 353
+    assert len(runs) == 439
     for s, rec in runs:
         assert rec["boundary_at"] is None, s["sc_id"]
         assert rec["actual_c_sequence"] == s["c_sequence"], s["sc_id"]
@@ -166,7 +167,8 @@ def test_c1_axis_covered_by_completing_strands():
 
 def test_terminal_realization_partial_without_meta():
     """★ slice 8 갱신(발견 2 / GAP-30 영향 노트): slice 7a/7b에서 'meta 미주입 → 기대-q 실현 0'이었으나
-    Batch A로 falsify — 완주 353 중 88(c0250 74×Q11 + c0252 14×Q08)이 meta 미주입에도 실현한다.
+    Batch A로 falsify — 완주 439 중 88(c0250 74×Q11 + c0252 14×Q08)이 meta 미주입에도 실현한다
+    (slice 9 Batch B는 실현 0 추가 — 신규 86 = starve 40 + axis-None 46).
     c0200/c0204가 '선언 부재'를 fail-state(AIC-MISSING / MISSING-NO-POLICY)로 해석하므로 df-default가
     fail인 A0/A4의 ROUTE c는 외부 meta 없이 실현한다(realization=0은 c0251/c0253처럼 df-default가 pass인
     backbone-only 특성이었음). ① 자체는 미해소 — 나머지 ROUTE 종착 strand는 mis-realize/INVALID-starve로
@@ -212,16 +214,17 @@ def test_d_s4_q05_runtime_isolated_break():
 
 
 def test_axis_only_terminal_unrealized_break():
-    """★ falsifiable BREAK: axis evaluator로 종착하는 68 strand는 전부 terminal=None을 실현한다
+    """★ falsifiable BREAK: axis evaluator로 종착하는 114 strand는 전부 terminal=None을 실현한다
     (axis verify/detect는 route_to_q만 반환, run_strand는 ROUTE c의 terminal 키만 실현). 기대 terminal은
-    c0210 종착 64=INVALID/UNSUPPORTED, c0201 종착 4=QUARANTINE(Q05) — 모두 미실현(② class, GAP-5/8/12/13)."""
+    c0210 종착 110=INVALID/UNSUPPORTED, c0201 종착 4=QUARANTINE(Q05) — 모두 미실현(② class, GAP-5/8/12/13).
+    slice 9(Batch B)가 c0210 종착 +46(64→110) → axis-only 종착 68→114(Phase 7 D-S4 소관, 미실현 불변)."""
     runs = _run_all()
     axis_last = [(s, rec) for s, rec in runs if s["c_sequence"][-1] not in ROUTE_C]
-    assert len(axis_last) == 68
+    assert len(axis_last) == 114
     for s, rec in axis_last:
         assert rec["terminal"] is None, s["sc_id"]          # 공통: 기대 terminal 미실현
     c0210_last = [s for s, _ in axis_last if s["c_sequence"][-1] == "c0210"]
-    assert len(c0210_last) == 64
+    assert len(c0210_last) == 110
     assert all(s["terminal"] in ("INVALID", "UNSUPPORTED") for s in c0210_last)
     c0201_last = [s for s, _ in axis_last if s["c_sequence"][-1] == "c0201"]
     assert len(c0201_last) == 4

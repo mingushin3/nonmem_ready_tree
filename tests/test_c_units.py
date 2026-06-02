@@ -43,6 +43,12 @@ from src.c_units.c0311_convert_time_format import convert_time_format
 from src.c_units.c0315_convert_time_anchor import convert_time_anchor
 from src.c_units.c0312_detect_timezone import detect_timezone
 from src.c_units.c0313_normalize_timezone import normalize_timezone
+# slice 9 — Batch B (L-3->L-4 axis DETECT/VERIFY)
+from src.c_units.c0211_detect_above_uloq import detect_above_uloq
+from src.c_units.c0212_detect_replicate_obs import detect_replicate_obs
+from src.c_units.c0214_verify_unit_declaration import verify_unit_declaration
+from src.c_units.c0215_detect_duplicate_row import detect_duplicate_row
+from src.c_units.c0216_detect_encoding import detect_encoding
 from src.c_units.c0380_detect_covariate_layout import detect_covariate_layout
 from src.c_units.c0381_classify_covariate_layout import classify_covariate_layout_mess
 from src.c_units.c0392_detect_placebo_subject import detect_placebo_subject
@@ -4550,3 +4556,215 @@ class TestC0253:
             r = route_blq_token(pd.DataFrame({"dv_value": [0.1]}), {"a5_state": st})
             assert r["routing_decision"] == "Q01", st
             assert r["q_code"] == "Q01", st
+
+
+# ===== Phase 5 · Slice 9 — Batch B (L-3->L-4 axis DETECT/VERIFY, req_det None) =====
+
+class TestC0211:
+    """c0211 — ULOQ 초과 관측 감지 (DETECT ABOVE_ULOQ)
+
+    postcondition_predicate:
+        isinstance(meta.get('has_above_uloq'), bool)
+
+    srp_intent: DETECT ABOVE_ULOQ
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: ['Q01']
+    verify_visualization:
+        pass_route_to: c0205
+        fail_route_to: Q01
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """clean DV(ULOQ 초과 없음) → has_above_uloq=False, pass(→c0205, route None)."""
+        df, meta, expected = load_fixture_with_meta("c0211", "happy")
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] == expected["has_above_uloq"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('has_above_uloq'), bool)
+
+    def test_edge(self, load_fixture_with_meta):
+        """numeric dv_value > uloq(meta), 정책 부재 → has_above_uloq=True, fail→Q01."""
+        df, meta, expected = load_fixture_with_meta("c0211", "edge")
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] == expected["has_above_uloq"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('has_above_uloq'), bool)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ '>100' 토큰(숫자비교만으론 silent miss) → has_above_uloq=True, Q01 (naive numeric-only 차단).
+        ★ np.bool_ 저장 차단: postcond isinstance(.,bool) + `is True` 동시 단언."""
+        df, meta, expected = load_fixture_with_meta("c0211", "trap")
+        result = detect_above_uloq(df, meta)
+        assert result["has_above_uloq"] is True
+        assert result["pass"] is False
+        assert result["route_to_q"] == "Q01"
+        assert isinstance(meta.get('has_above_uloq'), bool)
+
+
+class TestC0212:
+    """c0212 — 반복 관측 감지 (DETECT REPLICATE_OBS)
+
+    postcondition_predicate:
+        isinstance(meta.get('has_replicates'), bool)
+
+    srp_intent: DETECT REPLICATE_OBS
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: ['Q01']
+    verify_visualization:
+        pass_route_to: c0205
+        fail_route_to: Q01
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """고유 (ID,TIME) → replicate 없음 → has_replicates=False, pass(→c0205)."""
+        df, meta, expected = load_fixture_with_meta("c0212", "happy")
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] == expected["has_replicates"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('has_replicates'), bool)
+
+    def test_edge(self, load_fixture_with_meta):
+        """같은 (ID,TIME)에 서로 다른 DV ≥2 → 정당 replicate → has_replicates=True, 정책 부재 → Q01."""
+        df, meta, expected = load_fixture_with_meta("c0212", "edge")
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] == expected["has_replicates"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert isinstance(meta.get('has_replicates'), bool)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ DUPLICATE-EXACT(전체 행 일치)는 replicate 아님 → has_replicates=False
+        (naive groupby(len>=2)가 exact dup을 replicate로 오탐하는 것 차단; A9/c0215 소관)."""
+        df, meta, expected = load_fixture_with_meta("c0212", "trap")
+        result = detect_replicate_obs(df, meta)
+        assert result["has_replicates"] is False
+        assert result["pass"] is True
+        assert isinstance(meta.get('has_replicates'), bool)
+
+
+class TestC0215:
+    """c0215 — 중복 행 감지 (A9 보조) (DETECT DUPLICATE_ROW)
+
+    postcondition_predicate:
+        isinstance(meta.get('has_exact_duplicates'), bool)
+
+    srp_intent: DETECT DUPLICATE_ROW
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []  (A9 보조 helper; route_to_q 항상 None)
+    verify_visualization:
+        pass_route_to: c0209
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """모든 행이 고유 → has_exact_duplicates=False, route None / pass True (helper)."""
+        df, meta, expected = load_fixture_with_meta("c0215", "happy")
+        result = detect_duplicate_row(df, meta)
+        assert result["has_exact_duplicates"] == expected["has_exact_duplicates"]
+        assert result["route_to_q"] is None
+        assert result["pass"] is True
+        assert isinstance(meta.get('has_exact_duplicates'), bool)
+
+    def test_edge(self, load_fixture_with_meta):
+        """완전 중복 행 존재 → has_exact_duplicates=True (검출 발화; route None helper)."""
+        df, meta, expected = load_fixture_with_meta("c0215", "edge")
+        result = detect_duplicate_row(df, meta)
+        assert result["has_exact_duplicates"] is True
+        assert result["route_to_q"] is None
+        assert isinstance(meta.get('has_exact_duplicates'), bool)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ 같은 (ID,TIME) 다른 DV(=A5 replicate)는 exact dup 아님 → False
+        (replicate를 duplicate로 오탐 차단; c0212와 직교)."""
+        df, meta, expected = load_fixture_with_meta("c0215", "trap")
+        result = detect_duplicate_row(df, meta)
+        assert result["has_exact_duplicates"] is False
+        assert isinstance(meta.get('has_exact_duplicates'), bool)
+
+
+class TestC0216:
+    """c0216 — 인코딩 문제 감지 (A9 보조) (DETECT ENCODING)
+
+    postcondition_predicate:
+        isinstance(meta.get('has_encoding_issues'), bool)
+
+    srp_intent: DETECT ENCODING
+    kind: detect
+    requires_detection_by: null
+    can_route_to_q: []  (A9 보조 helper; route_to_q 항상 None)
+    verify_visualization:
+        pass_route_to: c0209
+        fail_route_to: null
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """ASCII 문자열만 → has_encoding_issues=False, route None / pass True (helper)."""
+        df, meta, expected = load_fixture_with_meta("c0216", "happy")
+        result = detect_encoding(df, meta)
+        assert result["has_encoding_issues"] == expected["has_encoding_issues"]
+        assert result["route_to_q"] is None
+        assert result["pass"] is True
+        assert isinstance(meta.get('has_encoding_issues'), bool)
+
+    def test_edge(self, load_fixture_with_meta):
+        """문자열 컬럼 부재(숫자 전용) → 점검 대상 없음 → has_encoding_issues=False (날조 금지)."""
+        df, meta, expected = load_fixture_with_meta("c0216", "edge")
+        result = detect_encoding(df, meta)
+        assert result["has_encoding_issues"] == expected["has_encoding_issues"]
+        assert isinstance(meta.get('has_encoding_issues'), bool)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ 비-ASCII 문자(cp949 '환자' 등) → has_encoding_issues=True
+        (hardcoded-False / 컬럼명만 점검하는 naive 감지기 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0216", "trap")
+        result = detect_encoding(df, meta)
+        assert result["has_encoding_issues"] is True
+        assert isinstance(meta.get('has_encoding_issues'), bool)
+
+
+class TestC0214:
+    """c0214 — 단위 선언 검증 (VERIFY UNIT_DECLARATION)
+
+    postcondition_predicate:
+        meta.get('unit_declaration_complete', True)
+
+    srp_intent: VERIFY UNIT_DECLARATION
+    kind: verify
+    requires_detection_by: null
+    can_route_to_q: ['Q10']
+    verify_visualization:
+        pass_route_to: next
+        fail_route_to: Q10
+    ★ df-default divergence(GAP-32): c0213은 '신호 없으면 consistent=True(scope-out)'이나
+      c0214는 numeric 컬럼이 있고 units 미선언이면 incomplete→Q10(df-default=fail). 정반대.
+    """
+
+    def test_happy(self, load_fixture_with_meta):
+        """모든 numeric 컬럼에 단위 선언(meta['units']) → complete=True, pass(→next, route None)."""
+        df, meta, expected = load_fixture_with_meta("c0214", "happy")
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] == expected["unit_declaration_complete"]
+        assert result["pass"] == expected["pass"]
+        assert result["route_to_q"] == expected["route_to_q"]
+        assert meta.get('unit_declaration_complete', True)
+
+    def test_edge(self, load_fixture_with_meta):
+        """numeric 컬럼 부재 → 점검 대상 없음 → 공허 complete=True (pass; 날조 금지)."""
+        df, meta, expected = load_fixture_with_meta("c0214", "edge")
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] == expected["unit_declaration_complete"]
+        assert result["pass"] == expected["pass"]
+        assert meta.get('unit_declaration_complete', True)
+
+    def test_trap(self, load_fixture_with_meta):
+        """★ units dict 존재하나 일부 numeric 컬럼 단위 누락 → incomplete=False, fail→Q10
+        (naive 'units 키 존재 → pass' 차단)."""
+        df, meta, expected = load_fixture_with_meta("c0214", "trap")
+        result = verify_unit_declaration(df, meta)
+        assert result["unit_declaration_complete"] is False
+        assert result["pass"] is False
+        assert result["route_to_q"] == "Q10"

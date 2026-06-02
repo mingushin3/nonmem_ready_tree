@@ -104,6 +104,15 @@ from src.c_units.c0254_route_covariate_layout import route_covariate_layout
 from src.c_units.c0255_route_analyte_column import route_analyte_column
 from src.c_units.c0256_route_cross_column_invariant import route_cross_column_invariant
 from src.c_units.c0257_route_row_ordering import route_row_ordering
+# ===== slice 9 — Batch B: L-3->L-4 axis DETECT/VERIFY (req_det None → D-S1 gate 비대상) =====
+#   A5 sub(c0211 ABOVE_ULOQ·c0212 REPLICATE_OBS, can_route_to_q=[Q01]) + unit(c0214, →Q10)
+#   + A9 helper(c0215 DUPLICATE_ROW·c0216 ENCODING, can_route_to_q=[]). detect/verify는 terminal 키
+#   미반환 → run_strand 완주 path만 +86(353→439), Q 실현은 c0253/축 ROUTE·② D-S4 소관(GAP-30/32).
+from src.c_units.c0211_detect_above_uloq import detect_above_uloq
+from src.c_units.c0212_detect_replicate_obs import detect_replicate_obs
+from src.c_units.c0214_verify_unit_declaration import verify_unit_declaration
+from src.c_units.c0215_detect_duplicate_row import detect_duplicate_row
+from src.c_units.c0216_detect_encoding import detect_encoding
 
 _CUNITS_PATH = PROJECT_ROOT / "spec" / "c_units.json"
 _CUNITS = json.loads(_CUNITS_PATH.read_text(encoding="utf-8"))
@@ -186,6 +195,13 @@ REGISTRY = {
     "c0255": ("route", route_analyte_column),         # A8 → Q09 (reqdet c0208)
     "c0256": ("route", route_cross_column_invariant), # A9 → Q06/Q15D/INVALID (reqdet c0209)
     "c0257": ("route", route_row_ordering),           # A6 → Q04/Q03 (reqdet c0206; Q03 4-state c0251 선례)
+    # ===== slice 9 — Batch B: L-3->L-4 axis DETECT/VERIFY (52→57). req_det None → no D-S1 gate =====
+    #   detect/verify는 meta 플래그만 세팅·terminal 키 미반환 → 완주 path +86(353→439). Q 미실현(②/GAP-30/32).
+    "c0211": ("detect", detect_above_uloq),           # A5 ABOVE-ULOQ sub (can_route_to_q=[Q01]; runtime Q01=c0253)
+    "c0212": ("detect", detect_replicate_obs),        # A5 REPLICATE sub (can_route_to_q=[Q01]; runtime Q01=c0253)
+    "c0214": ("verify", verify_unit_declaration),     # unit (→Q10; df-default=fail, GAP-32; runtime 미실현 ②)
+    "c0215": ("detect", detect_duplicate_row),        # A9 DUPLICATE-EXACT helper (can_route_to_q=[])
+    "c0216": ("detect", detect_encoding),             # A9 ENCODING-FIX helper (can_route_to_q=[])
 }
 
 
