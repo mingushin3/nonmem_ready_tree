@@ -1609,7 +1609,7 @@
     "precondition_checklist_ko": ["A5 state가 fail state인가?"],
     "r_snippet": "routing <- switch(meta$a5, 'BLQ-NO-POLICY'='Q01', 'ABSENT'='INVALID', 'BIOANALYTICAL-FINAL-FLAG-MISSING'='Q15D', 'Q01')",
     "python_snippet": "fail_map = {'BLQ-NO-POLICY':'Q01','LLOQ-MISSING':'Q01','ABOVE-ULOQ-NO-POLICY':'Q01','REPLICATE-NO-POLICY':'Q01','BIOANALYTICAL-FINAL-FLAG-MISSING':'Q15D','ABSENT':'INVALID'}\nrouting = fail_map[meta['a5_state']]",
-    "trigger_condition": "c0205 결과 fail state", "can_route_to_q": ["Q01"],
+    "trigger_condition": "c0205 결과 fail state", "can_route_to_q": ["Q01", "Q15D"],
     "skeleton_hook": "N4/N5→Q01/Q15D/INVALID", "verify_visualization": null,
     "before_after_toy_example": {"before": "a5_state='BLQ-NO-POLICY'", "after": "→Q01(subtype:blq)"},
     "ref": "universe_sm §2 N4/N5, §3 A5"

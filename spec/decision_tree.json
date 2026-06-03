@@ -1,5 +1,5 @@
 {
-  "schema_version": "0.2-phase7-step1-2.6-decisionAB",
+  "schema_version": "0.2-phase7-step1-2.6-decisionABC",
   "generated_by": "build_decision_tree.py (DETERMINISTIC; 재실행 시 동일)",
   "scope": "step 1~2.6 골격 + Phase 7 결정 A(c0252/c0204 INFUSION-STOP-RESTART→Q04 spec-change)·결정 B(terminal_routing INVALID). bundles·재배선(①) 제외.",
   "provenance": {
@@ -757,6 +757,7 @@
       "q_status": "exercised",
       "incoming_wired_c": [
         "c0205",
+        "c0253",
         "c0209",
         "c0256"
       ],
@@ -2057,6 +2058,7 @@
       "from_kind": "detect",
       "q_status": "exercised",
       "realizing_route_c": [
+        "c0253",
         "c0256"
       ],
       "strand_count": 0,
@@ -2075,6 +2077,22 @@
         "c0253"
       ],
       "strand_count": 445,
+      "gap": [
+        "GAP-28"
+      ]
+    },
+    {
+      "from": "c0253",
+      "to": "Q15D",
+      "type": "conditional",
+      "source": "can_route_to_q",
+      "from_kind": "route",
+      "q_status": "exercised",
+      "realizing_route_c": [
+        "c0253",
+        "c0256"
+      ],
+      "strand_count": 89,
       "gap": [
         "GAP-28"
       ]
@@ -2234,6 +2252,7 @@
       "from_kind": "verify",
       "q_status": "exercised",
       "realizing_route_c": [
+        "c0253",
         "c0256"
       ],
       "strand_count": 0,
@@ -2513,6 +2532,7 @@
       "from_kind": "route",
       "q_status": "exercised",
       "realizing_route_c": [
+        "c0253",
         "c0256"
       ],
       "strand_count": 22,
@@ -2634,15 +2654,7 @@
         "reason": "REGISTRY 미배선 c. node 부재 → 부착·라우팅 보류."
       }
     ],
-    "scope_out_edges": [
-      {
-        "from": "c0253",
-        "to": "Q15D",
-        "terminal": "QUARANTINE",
-        "strand_count": 89,
-        "gap": "GAP-28"
-      }
-    ],
+    "scope_out_edges": [],
     "unreached_q": [
       {
         "q": "Q15A",
@@ -2683,7 +2695,7 @@
     "q_terminals": 19,
     "c_nodes": 57,
     "attach_edges": 76,
-    "conditional_edges": 51,
+    "conditional_edges": 52,
     "terminal_edges": 3,
     "terminal_strands": 315,
     "terminal_declared_unexercised": [
@@ -2721,9 +2733,9 @@
         "Q15X"
       ]
     },
-    "pure_realized_strands": 3139,
-    "scope_out_edges": 1,
-    "scope_out_strands": 89,
+    "pure_realized_strands": 3228,
+    "scope_out_edges": 0,
+    "scope_out_strands": 0,
     "gap25_remeasure": {
       "collapsed_display_nodes": 100,
       "expanded_worst_nodes": 190,

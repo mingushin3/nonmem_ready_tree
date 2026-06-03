@@ -4527,11 +4527,11 @@ class TestC0253:
     srp_intent: ROUTE BLQ_TOKEN
     kind: route
     requires_detection_by: c0205
-    can_route_to_q: ['Q01']
+    can_route_to_q: ['Q01', 'Q15D']
     매핑(SSOT strands.json 645 last-c: Q01 445 / Q15D 89 / INVALID 111, c0205._route_a5 동형):
       {BLQ-NO-POLICY,LLOQ-MISSING,ABOVE-ULOQ-NO-POLICY,REPLICATE-NO-POLICY}→Q01,
       BIOANALYTICAL-FINAL-FLAG-MISSING→Q15D, ABSENT→INVALID.
-    (can_route_to_q=[Q01] ⊊ 실제 라우팅 — Q15D/INVALID는 Phase 7 D-S4 재구성, GAP-28.)
+    (can_route_to_q=[Q01, Q15D] — INVALID만 terminal_routing(결정 B); 결정 C로 Q15D 편입, GAP-28 RESOLVED.)
     """
 
     def test_happy(self, load_fixture_with_meta):

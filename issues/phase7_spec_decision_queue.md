@@ -5,7 +5,7 @@
 > **기준:** 2026-06-03 · Phase 7 step1~2.5 골격 생성 직후 · baseline 934 green · `spec/decision_tree.json` `deferred{}` 와 동기.
 > **불변:** 본 파일 생성 세션(골격)은 아래 항목을 **주입하지 않았다**(`test_scope_out_edges_not_injected`로 부재 고정). 결정 전까지 미주입 유지.
 
-> **★ 갱신(2026-06-03 결정 A·B 반영 — [[GAP-34]]):** 사용자 승인 결정 A(c0252/c0204 INFUSION-STOP-RESTART→Q04 spec-change)·결정 B(`terminal_routing` INVALID 3 edge)를 SSOT 순서로 반영했다. 아래 A·D·권장순서에 처리(✅)/이월(⏸) 표기. **A+B 후 잔존 scope-out = c0253→Q15D(89, 유일)** + UNREACHED-Q 4(일괄 이월). decision_tree: conditional 51 / terminal 3(315) / scope_out 1(89) / pure 3139. `pytest` green.
+> **★ 갱신(2026-06-03 결정 A·B 반영 — [[GAP-34]]):** 사용자 승인 결정 A(c0252/c0204 INFUSION-STOP-RESTART→Q04 spec-change)·결정 B(`terminal_routing` INVALID 3 edge)를 SSOT 순서로 반영했다. 아래 A·D·권장순서에 처리(✅)/이월(⏸) 표기. **A+B 후 잔존 scope-out = c0253→Q15D(89, 유일)** → **결정 C(2026-06-03)로 RESOLVE**(c0253.can_route_to_q +Q15D). 잔여 = UNREACHED-Q 4(일괄 이월). decision_tree: conditional **52** / terminal 3(315) / scope_out **0** / pure **3228**. `pytest` 937 green.
 
 ---
 
@@ -16,7 +16,7 @@
 |---|---|---|---|---|
 | c0252 → **Q04** | 168 | [[GAP-31]] | A4=INFUSION-STOP-RESTART→Q04가 strands SSOT이나 **Q04 ∉ c0252.postcond**(verbatim 1글자 금지). 현 INVALID-default. | (a) c_units c0252 precond/postcond/can_route_to_q에 INFUSION+Q04 추가(Phase 2.9-style, 승인) / (b) strands A4→Q04 라우팅 재모델(더 큰 범위) |
 | c0204 → **Q04** | — | [[GAP-5]] | universe_sm A4→Q04/INVALID이나 Q04 ∉ c0204.can_route_to_q([Q08,Q14]). | c0252와 동반 결정(A4 축 Q04 라우팅 주체 확정) |
-| c0253 → **Q15D** | 89 | [[GAP-28]] | A5=BIOANALYTICAL-FINAL-FLAG-MISSING→Q15D 실제 라우팅이나 c0253.can_route_to_q=[Q01]. Q15D는 c0256(A9)에서 22 strand 주입됨 → c0253발 89는 미주입. | c0253.can_route_to_q에 Q15D 추가(승인) 또는 A5→Q15D를 c0205/c0209 경유로 일원화 |
+| ~~c0253 → Q15D~~ ✅ | 89 | [[GAP-28]] | A5=BIOANALYTICAL-FINAL-FLAG-MISSING→Q15D 실제 라우팅이나 c0253.can_route_to_q=[Q01]이었음. Q15D는 c0256(A9)에서도 주입됨. | **✅ RESOLVED(결정 C, 2026-06-03):** c0253.can_route_to_q +Q15D → conditional edge(89 pure, scope_out 1→0). cite-verify 완료(해결후보 (a) 채택, impl 무변경). |
 | c0252 → **INVALID** | 174 | [[GAP-31]] | INVALID는 terminal(Q 아님). conditional edge 대상 외(현 골격은 Q-edge만). | terminal-edge 표현 규약 결정(아래 D와 함께) |
 | c0253 → **INVALID** | 111 | [[GAP-8]] | A5=ABSENT→INVALID scope-out. | 동상 |
 | c0256 → **INVALID** | 30 | [[GAP-12]] | A9=IRRECONCILABLE→INVALID scope-out. | 동상 |
@@ -24,7 +24,7 @@
 > **★ 처리(2026-06-03 — [[GAP-34]]):**
 > - ✅ **c0252→Q04(168) · c0204→Q04** = 결정 A spec-change RESOLVE([[GAP-31]]/[[GAP-5]]); conditional edge 주입(pure 2971→3139).
 > - ✅ **c0252→INVALID(174) · c0253→INVALID(111) · c0256→INVALID(30)** = 결정 B `terminal_routing` RESOLVE([[GAP-31]]/[[GAP-8]]/[[GAP-12]]); 315 strand, INVALID 도달성 확보(고립 0).
-> - ⏸ **c0253→Q15D(89, [[GAP-28]])** = **A+B 후 유일 잔존 scope-out**. 결정 A와 동형(ROUTE c SSOT가 can_route_to_q 미선언 Q로 라우팅)이나 **미승인 + cite-verify 미완** → deferred 유지. **다음 spec 결정 승인 대상**이며, 결정 A처럼 `universe_sm`/`q_codes`에서 **c0253→Q15D(A5=BIOANALYTICAL-FINAL-FLAG-MISSING→Q15D) 근거 cite-verify 선행** 필요.
+> - ✅ **c0253→Q15D(89, [[GAP-28]])** = **결정 C로 RESOLVE**(2026-06-03, 사용자 승인 — 해결후보 (a)). 결정 A와 동형(ROUTE c SSOT가 can_route_to_q 미선언 Q로 라우팅). cite-verify 완료(`universe_sm` §3 A5 :146 · `q_codes` Q15D.trigger :278 · `anchors` :54 · c0205 선례). c0253.can_route_to_q +Q15D(최소 변경, impl/postcond 무변경) → conditional edge 편입(89 pure, scope_out 1→0). **§A scope-out 전부 종결(0).**
 
 ## B. c0210 A10 — 위치 + terminal 라우팅 ([[GAP-13]])
 - **쟁점 1(terminal 라우팅):** A10 NON-TABULAR→**UNSUPPORTED**, CORRUPTED→**INVALID**. 둘 다 process terminal(Q 아님), `can_route_to_q=[]`. 현 골격 미표현.

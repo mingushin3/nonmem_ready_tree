@@ -474,8 +474,8 @@ def test_route_blq_no_policy_to_q01_dynamic():
 
 
 def test_route_blq_bioanalytical_to_q15d_dynamic():
-    """a5_state=BIOANALYTICAL-FINAL-FLAG-MISSING → c0253 → Q15D. c0253 실제 라우팅 {Q01,Q15D,INVALID}은
-    can_route_to_q=[Q01]의 상위집합 — Q15D/INVALID는 Phase 7 D-S4 재구성(GAP-28)."""
+    """a5_state=BIOANALYTICAL-FINAL-FLAG-MISSING → c0253 → Q15D. c0253 실제 라우팅 {Q01,Q15D,INVALID}:
+    Q01/Q15D는 can_route_to_q(결정 C로 Q15D 편입, GAP-28 RESOLVED)·INVALID는 terminal_routing(결정 B)."""
     rec = run_strand(["c0205", "c0253"], pd.DataFrame({"dv_value": [0.1]}), {"obs_blq_state": "bioanalytical-final-flag-missing"})
     assert rec["terminal"] == "QUARANTINE"
     assert rec["q_code"] == "Q15D"

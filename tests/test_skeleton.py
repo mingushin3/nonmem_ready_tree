@@ -210,9 +210,9 @@ def test_blq_c_layer_assignment():
 
 
 def test_blq_q_terminals_not_isolated():
-    """★ D-S4: Q01 라우터는 c0253(ROUTE), c0253.can_route_to_q=[Q01]. Q01이 ≥1 strand로 도달·c0253로 종착
+    """★ D-S4: Q01 라우터는 c0253(ROUTE), c0253.can_route_to_q=[Q01, Q15D]. Q01이 ≥1 strand로 도달·c0253로 종착
     → 고립 Q-terminal 0. (c0306.can_route_to_q=[Q01]은 D-S4 *선언*이지 strand 라우터 아님 — GAP-28.)"""
-    assert CUNITS["c0253"]["can_route_to_q"] == ["Q01"]
+    assert CUNITS["c0253"]["can_route_to_q"] == ["Q01", "Q15D"]
     assert CUNITS["c0306"]["can_route_to_q"] == ["Q01"]  # D-S4 선언(runtime 라우터 아님)
     assert BLQ_Q01
     assert {s["q_code"] for s in BLQ_Q01} == {"Q01"}
@@ -221,7 +221,7 @@ def test_blq_q_terminals_not_isolated():
 
 def test_blq_route_q_targets_reachable():
     """D-S4 조기보증: c0253이 실제 도달시키는 Q01/Q15D 타깃이 strand에 존재(Phase 7 conditional-edge 고립 방지).
-    c0253 실제 라우팅 {Q01,Q15D,INVALID} ⊋ can_route_to_q=[Q01] — Q15D/INVALID는 D-S4 재구성(GAP-28)."""
+    c0253 실제 라우팅 {Q01,Q15D,INVALID}: Q01/Q15D는 can_route_to_q(결정 C로 Q15D 편입)·INVALID는 terminal_routing(결정 B)."""
     assert any(s.get("q_code") == "Q01" for s in STRANDS)
     assert any(s.get("q_code") == "Q15D" and s["c_sequence"][-1] == "c0253" for s in STRANDS)
 

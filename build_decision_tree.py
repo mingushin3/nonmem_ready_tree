@@ -14,10 +14,10 @@ SSOT 입력(read-only):
 생성 근거(falsifiable, cite-verify 완료):
   - cost=Σc.cost (run_strand; Q.routing_cost 비가산). 5000 strand 전부 total_cost==Σc.cost 선검증 통과.
   - Q partition(두 lens 일치): EXERCISED 13(wired ROUTE c can_route_to_q) / STATIC 2(Q05 c0201·Q10 c0214, nonroute) /
-    UNREACHED 4(Q15A/B/C/X, wired c edge 0). PURE 3139 strand(결정 A로 c0252→Q04 168 편입).
+    UNREACHED 4(Q15A/B/C/X, wired c edge 0). PURE 3228 strand(결정 A c0252→Q04 168 + 결정 C c0253→Q15D 89 편입).
   - 결정 A(GAP-31/5 RESOLVED): c0252/c0204에 INFUSION-STOP-RESTART→Q04 정합 → conditional edge +2.
   - 결정 B(GAP-8/12 RESOLVED): terminal_routing 3 edge(c0252/c0253/c0256→INVALID, 315 strand)=postcond INVALID ∩ 측정.
-  - 잔존 SCOPE-OUT 1 edge: c0253→Q15D(89, GAP-28, deferred). c0251→INVALID(선언·0 strand)=terminal_declared_unexercised.
+  - 잔존 SCOPE-OUT 0: c0253→Q15D(89)는 결정 C(GAP-28 RESOLVE)로 can_route_to_q 편입 → pure. c0251→INVALID(선언·0 strand)=terminal_declared_unexercised.
 
 산출: spec/decision_tree.json. 검증: tests/test_decision_tree.py.
 """
@@ -143,7 +143,7 @@ for cid in WIRED:
 # ═══════════════ step 2.5: D-S4 conditional-edge 재구성 (순수 주입) ═══════════════
 conditional_routing = []
 GAP_BY_C = {  # 순수-edge GAP 출처 cite (해당 c가 가진 can_route_to_q 선언의 설계근거)
-    # 결정 B로 GAP-8(c0253→INVALID)·GAP-12(c0256→INVALID) RESOLVED → c0205/c0209 cite에서 제거. GAP-28(c0253→Q15D) 잔존.
+    # 결정 B로 GAP-8(c0253→INVALID)·GAP-12(c0256→INVALID) RESOLVED → c0205/c0209 cite에서 제거. 결정 C로 GAP-28(c0253→Q15D) RESOLVE(can_route_to_q 편입; provenance cite는 GAP-10/26 선례처럼 유지).
     "c0205": ["GAP-28"], "c0206": ["GAP-10"],
     "c0251": ["GAP-26"], "c0253": ["GAP-28"], "c0306": ["GAP-28"],
     "c0019": ["GAP-26"], "c0311": ["GAP-26"], "c0315": ["GAP-26"], "c0203": ["GAP-26"],
@@ -206,7 +206,7 @@ deferred = {
         {"id": "c0040-placeholder", "c": "c0040", "missing_edge": "(미배선)",
          "reason": "REGISTRY 미배선 c. node 부재 → 부착·라우팅 보류."},
     ],
-    "scope_out_edges": [  # GAP-28(c0253→Q15D)만 잔존: 결정 A로 c0252→Q04 해소·결정 B로 INVALID 3개 terminal_routing 이동. 미주입·deferred.
+    "scope_out_edges": [  # 결정 C(GAP-28)로 c0253→Q15D can_route_to_q 편입 → scope-out 0(빈 배열). 결정 A c0252→Q04·결정 B INVALID 3개 terminal_routing.
         {"from": cid, "to": q, "terminal": "QUARANTINE", "strand_count": n,
          "gap": {("c0253", "Q15D"): "GAP-28"}.get((cid, q), "?")}
         for (cid, q), n in sorted(SCOPE_Q.items())
@@ -245,7 +245,7 @@ stats = {
 }
 
 tree = {
-    "schema_version": "0.2-phase7-step1-2.6-decisionAB",
+    "schema_version": "0.2-phase7-step1-2.6-decisionABC",
     "generated_by": "build_decision_tree.py (DETERMINISTIC; 재실행 시 동일)",
     "scope": "step 1~2.6 골격 + Phase 7 결정 A(c0252/c0204 INFUSION-STOP-RESTART→Q04 spec-change)·결정 B(terminal_routing INVALID). bundles·재배선(①) 제외.",
     "provenance": {

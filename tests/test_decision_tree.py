@@ -6,8 +6,9 @@ run_strand 무변경: decision_tree.json만 로드해 SSOT(anchors/c_units/q_cod
 - D-S4(step 2.5): 모든 배선 c.can_route_to_q → conditional edge 존재 + 고립 Q-terminal 0(exercised 한정).
 - 결정 A(GAP-31/5 RESOLVED): c0252/c0204 INFUSION-STOP-RESTART→Q04 conditional edge 주입(pure 3139).
 - 결정 B(GAP-8/12 RESOLVED): terminal_routing(c0252/c0253/c0256→INVALID 315) — Q-edge와 분리, INVALID 도달성.
+- 결정 C(GAP-28 RESOLVED): c0253.can_route_to_q +Q15D → c0253→Q15D conditional edge 편입(89 pure, 누적 3228).
 - 압축 불변성(① 비의존): 5000 strand total_cost==Σc.cost(cost) + pure(last-c∈ROUTE·q∈can_route_to_q) edge 재현(terminal).
-- scope 규율: 잔존 scope-out 1 edge(c0253→Q15D, GAP-28)만 미주입·deferred 기록.
+- scope 규율: 결정 C 후 scope-out 0 edge(deferred.scope_out_edges 빈 배열).
 - GAP-25: 실 axis-state 노드수 재측정(≪5000).
 - 결정론: build_decision_tree.tree == on-disk(재생성 동일, 생성 근거 falsifiable).
 """
@@ -121,10 +122,10 @@ TERMSET = {(e["from"], e["to"]) for e in TREE["terminal_routing"]}
 
 
 def test_scope_out_edges_not_injected():
-    """★ scope 규율: 잔존 scope-out(c0253→Q15D, GAP-28)만 미주입. 결정 A로 c0252→Q04 conditional 주입,
-    결정 B로 INVALID 3개는 terminal_routing(conditional_routing 아님)으로 이동."""
-    # 유일 잔존 scope-out Q-edge: conditional/terminal 어느 배열에도 미주입
-    assert ("c0253", "Q15D") not in EDGESET
+    """★ scope 규율: 결정 C(GAP-28 RESOLVE)로 c0253→Q15D가 can_route_to_q 편입 → conditional 주입(scope-out 0).
+    결정 A로 c0252→Q04 conditional 주입, 결정 B로 INVALID 3개는 terminal_routing(conditional_routing 아님)으로 이동."""
+    # 결정 C(GAP-28): c0253→Q15D는 이제 conditional edge로 주입됨(더는 scope-out 아님)
+    assert ("c0253", "Q15D") in EDGESET
     assert ("c0253", "Q15D") not in TERMSET
     # 결정 A: c0252→Q04는 conditional_routing에 주입됨
     assert ("c0252", "Q04") in EDGESET
@@ -135,12 +136,12 @@ def test_scope_out_edges_not_injected():
 
 
 def test_scope_out_documented_in_deferred():
-    """잔존 scope-out 1 edge(c0253→Q15D, GAP-28)가 deferred.scope_out_edges에 strand_count와 함께 기록(이월 추적)."""
+    """결정 C(GAP-28 RESOLVE) 후 scope-out 0 → deferred.scope_out_edges는 빈 배열(잔존 이월 없음)."""
     so = TREE["deferred"]["scope_out_edges"]
     pairs = {(e["from"], e["to"]) for e in so}
-    assert pairs == {("c0253", "Q15D")}
-    assert sum(e["strand_count"] for e in so) == 89       # GAP-28 잔존(결정 A로 168·결정 B로 174+111+30 해소)
-    assert all(e["gap"] == "GAP-28" for e in so)
+    assert pairs == set()
+    assert sum(e["strand_count"] for e in so) == 0        # GAP-28 해소(89 pure 편입); 결정 A 168·결정 B 174+111+30 기해소
+    assert all(e["gap"] == "GAP-28" for e in so)          # vacuous(빈 배열) — 잔존 시 GAP cite 보존 규약
 
 
 # ───────────────── 압축 불변성 (① 비의존) ─────────────────
@@ -161,8 +162,8 @@ def test_terminal_invariance_pure_scope():
         if lc in ROUTE_C and q and q in (CUNITS[lc].get("can_route_to_q") or []):
             assert (lc, q) in EDGESET, (lc, q)
             pure += 1
-    assert pure == 3139                                   # 결정 A로 c0252→Q04(168) 편입 (2971+168)
-    assert TREE["stats"]["pure_realized_strands"] == 3139
+    assert pure == 3228                                   # 결정 A c0252→Q04(168) + 결정 C c0253→Q15D(89) 편입 (2971+168+89)
+    assert TREE["stats"]["pure_realized_strands"] == 3228
 
 
 # ───────────────── 결정 B: terminal_routing (process-terminal edge) ─────────────────
