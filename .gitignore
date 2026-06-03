@@ -1,0 +1,3 @@
+# Python bytecode cache (재생성물 — 추적 불필요)
+__pycache__/
+*.py[cod]
