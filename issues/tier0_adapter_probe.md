@@ -1,5 +1,9 @@
 # Tier 0 Adapter — Real-File Probe (read-only, report-only)
 
+> **추적성 스탬프:** engine/SSOT baseline **2004d27** (frozen, ZERO-diff) · 이 probe 출력 = adapter
+> front-end **c83c520** 상태. (문서↔코드 falsifiable 귀속, 검토 §1 권고.) recipe-emit 보강은 별도
+> 산출물 `issues/tier0_recipe_emit.md`(working-tree, 미커밋)로 분리 — 본 probe는 재작성하지 않음.
+
 > **목적:** Tier 0 auto-ingest adapter(신규 `src/adapter/`, 엔진/SSOT 무수정)를 실물 전임상
 > 소분자 raw xlsx 3종에 투입 — 출발점 자동 detect + 이유 부착 + 57-wired 백본 navigate +
 > **첫 미지원 구조에서 정직 정지**(silent 추측 0). 실물 navigate 사거리·패치 우선순위 실측.
@@ -77,6 +81,13 @@ conc 의존 축(A0/A2~A9) 전부 `undetermined` — 부분 fingerprint로 명시
   - A: 동일 그룹의 재산출/재측정(replicate·reanalysis) → reconcile/dedupe 후 단일 시계열
   - B: 별개 arm/그룹(예: RLD vs 시험) → 분리 유지 + subject-wide→long PIVOT 개별 처리
   - why: 재측정 vs 별개군이 구조만으로 불확정 — 자동 선택 시 silent 오류(D-G2). 사용자 결정 필요.
+
+> **★ SUPERSEDED (검토 §3 교정, recipe-emit 보강):** 위 2옵션(arm-vs-replicate, B의 "RLD vs 시험")은
+> 도메인 오분류다 — `1.Data` 재산출은 **단말 NCA 재적합(파생 재적합)** = **비결정(non-decision)** 이다
+> (초기지표 동일·단말만 상이, raw conc엔 무의미). recipe-emit는 param-summary 재산출을 `decision_required`
+> 2옵션이 아니라 `non_decisions[derived-parameter-refit]`로 분류한다 → Mouse `decision_required` **1→0**,
+> `non_decisions` **0→1**. "RLD vs 시험"은 Dog 구조이며 Dog comparator-arm 체크리스트로 위치.
+> 상세 = `issues/tier0_recipe_emit.md` §2. (본 probe는 c83c520 출력 그대로 보존 — 정직 provenance.)
 
 **stop:** at=`structure-recognition` · gap=GAP-37  
 reason: 어느 시트도 tidy-long으로 충실 환원 불가 → conc 의존 detector 미dispatch (미배선 구조: ['intra-sheet-qa-block', 'param-summary', 'mean-sd-aggregate', 'reanalysis-duplicate', 'dose-bw-sheet-join'])

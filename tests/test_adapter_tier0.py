@@ -260,3 +260,135 @@ class TestRegressionGuard:
         inv = pd.DataFrame({"sheet_name": ["a", "b"]})
         seq2 = choose_detect_sequence(inv, {"file_exists": True}, faithful_tidy=False)
         assert seq2 == ["c0201", "c0210"]
+
+
+# ===== RECIPE-EMIT (경로 iii 보강: WU1 인벤토리 + 모델러 체크리스트, report-only) ========
+# recipe = 기술(description)·안내일 뿐 — 변환·트리 라우팅·M2 무. 감지된 구조만 단정, 나머지는 verify.
+
+def _wu(report, name):
+    return [w for w in report["recipe"]["work_units"] if w["name"] == name]
+
+
+class TestRecipeEmit:
+    # ---- HAPPY -----------------------------------------------------------
+    def test_recipe_status_described_not_executed(self, tmp_path):
+        """clean tidy → recipe 존재, 최상위·모든 work_unit status == 'described, not executed'."""
+        r = ingest(make_tidy(tmp_path))
+        rec = r["recipe"]
+        assert rec["status"] == "described, not executed"
+        for w in rec["work_units"]:
+            assert w["status"] == "described, not executed", w["name"]
+        assert "M2 무의존" in rec["note"]  # 트리 라우팅·실행 안 함 명시
+
+    def test_recipe_carries_commit_baseline(self, tmp_path):
+        """추적성: recipe.commit_baseline에 코드 baseline 해시 2004d27 포함."""
+        r = ingest(make_tidy(tmp_path))
+        assert "2004d27" in r["recipe"]["commit_baseline"]
+
+    # ---- EDGE (feature-driven WU) ---------------------------------------
+    def test_qa_block_recipe_wu1_targets(self, tmp_path):
+        """intra-sheet QA블록 → WU1 QA-strip, 제거대상에 Standard/DBLK/BLK 명시."""
+        rows = [["Sample", "Conc"], ["Standard sample", 0], ["DBLK", 0],
+                ["BLK (P)", 0], ["Subject-1", 5.2]]
+        path = _save(tmp_path / "qa.xlsx", [("2. Result", rows)])
+        r = ingest(path)
+        wu1 = _wu(r, "QA-strip")
+        assert wu1, "QA-strip WU1 필요"
+        joined = " ".join(wu1[0]["targets"])
+        assert "Standard" in joined and "DBLK" in joined and "BLK" in joined
+        assert wu1[0]["sheets"] == ["2. Result"]
+        assert wu1[0]["action"] == "remove"
+
+    def test_param_summary_recipe_skip_reserve(self, tmp_path):
+        """param-summary → WU1 skip-and-reserve(★ drop 아님), NCA 대조용 보존."""
+        rows = [["", "", "G1", "G2"], ["Parameters", "Unit", "Mean", "Mean"],
+                ["Cmax", "ng/mL", 23.4, 50.4]]
+        path = _save(tmp_path / "param.xlsx", [("1. Data", rows)])
+        r = ingest(path)
+        wu = _wu(r, "param-summary-reserve")
+        assert wu, "param-summary-reserve WU 필요"
+        assert wu[0]["action"] == "skip-and-reserve"
+        assert "drop" not in wu[0]["action"]
+        assert "NCA" in wu[0]["note"]
+
+    def test_bw_sheet_recipe_wu4_join(self, tmp_path):
+        """BW 시트 + conc → WU4 join, bw_source.in_workbook=True, sheets=[BW]."""
+        path = _save(tmp_path / "bw.xlsx", [
+            ("2. Result", [["Sample", "Conc"], ["Standard sample", 0], ["Subject-1", 5.2]]),
+            ("BW", [["Animal", "BW"], ["A1", 10.2]])])
+        r = ingest(path)
+        wu4 = _wu(r, "dose-bw-join")
+        assert wu4
+        assert wu4[0]["bw_source"]["in_workbook"] is True
+        assert wu4[0]["bw_source"]["sheets"] == ["BW"]
+
+    def test_no_bw_sheet_recipe_external(self, tmp_path):
+        """conc 있으나 BW 시트 부재 → WU4 external(in_workbook=False), 외부 PDF는 '확인' 안내."""
+        rows = [["Sample", "Conc"], ["Standard sample", 0], ["Subject-1", 5.2]]
+        path = _save(tmp_path / "qa.xlsx", [("2. Result", rows)])
+        r = ingest(path)
+        wu4 = _wu(r, "dose-bw-join")
+        assert wu4
+        assert wu4[0]["bw_source"]["in_workbook"] is False
+        assert any("PDF" in v for v in wu4[0]["verify"])  # 외부 출처는 예시·확인 안내(존재 단정 아님)
+
+    def test_modeler_checklist_flag_only(self, tmp_path):
+        """BLQ 토큰 → checklist blq-zero-policy decided=False; comparator 미점화(RLD 마커 없음)."""
+        path = make_tidy(tmp_path, conc_override=[0.0, "BLQ", "<LLOQ", 6.4])
+        r = ingest(path)
+        ids = {it["id"]: it for it in r["recipe"]["checklist"]}
+        assert "blq-zero-policy" in ids
+        assert ids["blq-zero-policy"]["decided"] is False     # adapter 자동결정 절대 금지
+        assert "comparator-arm-exclusion" not in ids          # RLD/Advagraf 마커 없음 → 미점화(정직)
+
+    def test_comparator_marker_flags_advagraf(self, tmp_path):
+        """파일명 'RLD 비교' → checklist comparator-arm-exclusion + evidence(자동결정 아님)."""
+        rows = [["Sample", "Conc"], ["Standard sample", 0], ["Subject-1", 5.2]]
+        path = _save(tmp_path / "beagle (RLD 비교).xlsx", [("2. Result", rows)])
+        r = ingest(path)
+        comp = [it for it in r["recipe"]["checklist"] if it["id"] == "comparator-arm-exclusion"]
+        assert comp, "RLD 마커 → comparator 체크리스트 필요"
+        assert comp[0]["decided"] is False
+        assert comp[0]["evidence"]  # 근거 동반(cite-verify)
+
+    # ---- TRAP (검토 §3 비결정 교정) -------------------------------------
+    def test_param_summary_reanalysis_is_non_decision(self, tmp_path):
+        """★검토 §3: param-summary 재산출 → 비결정(파생 재적합), arm-vs-replicate 2옵션 아님."""
+        rows = [["", "", "G2", "G2 (재산출)"], ["Parameters", "Unit", "Mean", "Mean"],
+                ["Cmax", "ng/mL", 50.4, 50.4]]
+        path = _save(tmp_path / "param.xlsx", [("1. Data", rows)])
+        r = ingest(path)
+        nd = r["non_decisions"]
+        assert nd and nd[0]["kind"] == "derived-parameter-refit"
+        assert nd[0]["classification"] == "non-decision"
+        assert nd[0]["evidence"]  # 재산출 셀 근거(cite-verify)
+        # arm-vs-replicate 2옵션이 param-summary 시트에 대해 surface되지 않음(오분류 제거)
+        assert not any(d.get("sheet") == "1. Data" for d in r["decision_required"])
+
+    def test_two_option_preserved_for_nonparam_wide(self, tmp_path):
+        """가드 과적용 방지: param-summary 아닌 wide(재산출)는 2옵션 그대로 유지(D-G2)."""
+        rows = [["Time", "G2", "G2 (재산출)"], [0, 1.1, 1.1], [1, 2.2, 2.3]]
+        path = _save(tmp_path / "amb.xlsx", [("conc", rows)])
+        r = ingest(path)
+        dr = r["decision_required"]
+        assert dr and "interpretation_A" in dr[0] and "interpretation_B" in dr[0]
+        assert r["non_decisions"] == []  # 비-param wide는 비결정으로 빼돌리지 않음
+
+    # ---- HONESTY (단정 vs 확인) -----------------------------------------
+    def test_recipe_verify_not_assert(self, tmp_path):
+        """QA에 가려진 conc → WU3 wide layout 단정 안 함, conc 출처는 verify(='확인하라')."""
+        rows = [["Sample", "Conc"], ["Standard sample", 0], ["Subject-1", 5.2]]
+        path = _save(tmp_path / "qa.xlsx", [("2. Result", rows)])
+        r = ingest(path)
+        wu3 = _wu(r, "pivot-wide-to-long")
+        assert wu3
+        assert wu3[0]["wide_layout_detected"] is False           # 단정 금지(자동확정 못 함)
+        assert any("출처" in v and "확인" in v for v in wu3[0]["verify"])  # conc 출처는 '확인하라'
+
+    def test_recipe_emit_keeps_honest_stop(self, tmp_path):
+        """recipe-emit는 변환 안 함 — honest-stop 유지(file-property만, df 미환원)."""
+        rows = [["Sample", "Conc"], ["Standard sample", 0], ["Subject-1", 5.2]]
+        path = _save(tmp_path / "qa.xlsx", [("2. Result", rows)])
+        r = ingest(path)
+        assert r["dispatched"]["c_sequence"] == ["c0201", "c0210"]  # recipe 생겨도 추측 dispatch 0
+        assert r["stop"]["at"] == "structure-recognition"

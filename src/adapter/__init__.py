@@ -12,7 +12,8 @@ from .column_canonicalizer import canonicalize
 from .descriptor_builder import build_meta
 from .navigator import navigate
 from .reason_binder import bind_wired
-from .gap_annotator import annotate_unwired, surface_ambiguous_wide
+from .gap_annotator import annotate_unwired, surface_ambiguous_wide, classify_non_decisions
+from .recipe_emitter import emit_recipe
 
 import pandas as pd
 
@@ -123,7 +124,9 @@ def ingest(xlsx_path: str) -> dict:
         "reasons": reasons,
         "unwired_notes": unwired_notes,
         "decision_required": decision_required,
+        "non_decisions": classify_non_decisions(structure),
         "dispatched": {"c_sequence": dispatched["c_sequence"],
                        "run_strand_record": _serializable_record(dispatched["run_strand_record"])},
         "stop": stop,
+        "recipe": emit_recipe(structure, findings),
     }
