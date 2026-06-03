@@ -71,9 +71,11 @@ All 3 dead c-units are **route** kind (cost=0) handling **fail-path** branches. 
 
 | c_id | Option A: Remove | Option B: Add sc | Option C: Keep as-is |
 |------|------------------|------------------|---------------------|
-| c0042 | Phase 2 re-entry: spec에서 삭제. Q01/Q04/Q08/Q09의 conditional edge 하나 감소. | Phase 3 re-entry: c0041 fail sc 추가. 기존 5000 sc 외 별도 fail-path 시나리오. | **D-S4 구조상 필요.** fail-path conditional edge 원천. strand에서 dead이나 tree에서는 live. |
+| c0042 | Phase 2 re-entry: spec에서 삭제. Q01/Q04/Q08/Q09의 conditional edge 하나 감소. | Phase 3 re-entry: c0041 fail sc 추가. 기존 5000 sc 외 별도 fail-path 시나리오. | **D-S4 구조상 필요.** fail-path conditional edge 원천. strand에서 dead; **배선 시** tree-live 후보(can_route_to_q→conditional edge). **현 57-wired `decision_tree.json`엔 미배선 = incoming edge 0 = tree 부재(미실현, [[GAP-36]])**. |
 | c0043 | Phase 2 re-entry: spec에서 삭제. Q11/Q15X의 conditional edge 하나 감소. | Phase 3 re-entry: c0001 fail sc 추가. schema 결함 시나리오. | **D-S4 구조상 필요.** schema 실패 시 Q-code routing의 유일한 경로. |
 | c0333 | Phase 2 re-entry: spec에서 삭제. Q10 routing은 c0170이 담당. | Phase 3 re-entry: c0170보다 c0333이 먼저 도달하는 sc 추가. | c0170이 동일 Q10을 routing하므로 실제 중복. 단, layer 계층이 다름(L-4 vs L-2). |
+
+> ★ **57-wired 시제 주의 ([[GAP-36]] honesty-ledger, 2026-06-03 Direction C):** 위 Option C / "Structural significance"의 "tree-live"·"유일한 경로"·"D-S4 구조상 필요"는 **배선 후** 성립하는 *forward-looking* 서술이다. 현 Phase 7 57-wired `spec/decision_tree.json`에서 c0042·c0043·c0333은 **전부 미배선 → incoming conditional edge 0 = tree 부재(미실현)**. ∴ DoD#3 **C1 = 119/122**(C_used 119 / C_all 122; 이 3 C_dead가 정확한 bound)는 현 경계의 **정직한 미구현**이다 — wired scope(57)는 무결. [[GAP-30]](상류 배선 백로그)·Batch E(c0042/c0043, L-1→L-2)·mess(c0333, L-4→L-5) 배선 시 각 `can_route_to_q`가 conditional edge로 편입되어 tree-live가 실현된다. C_dead 처분(Option A/B/C) 결정은 그 배선과 함께 일괄 pending(아래 §"다음 Phase 전 사용자 확인").
 
 ---
 

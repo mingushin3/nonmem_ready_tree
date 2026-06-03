@@ -234,8 +234,8 @@ def test_p9_10_banner_numbers_build_time_verifiable():
 def test_p9_11_c1_dead_c_matches_documented():
     """P9-11 DoD#3 C1: strand 미등장 dead c == 문서화된 C_dead {c0042,c0043,c0333}(UNDOCUMENTED dead 0).
     셋 다 미배선 fail-branch ROUTE c. closure_proof.md INV-3·strands_stats.md §6 기록.
-    ★ closure_proof는 "tree에서는 live"라 하나 현재 57-wired scope에선 미배선 → tree 부재(C1 OR절 미충족,
-    ②latent; GAP-36). 본 test는 '미기록 dead c가 새로 생기지 않음'을 회귀방지(정직한 경계 고정)."""
+    ★ closure_proof Option C는 "배선 시 tree-live" forward-looking(2026-06-03 시제 정정·GAP-36 RESOLVED);
+    현 57-wired scope에선 미배선 → tree 부재(C1 OR절 미충족, ②latent). 본 test는 '미기록 dead c가 새로 생기지 않음'을 회귀방지(정직한 경계 고정)."""
     assert c1_dead_c() == DOCUMENTED_CDEAD, f"dead c set drifted from documented C_dead: {c1_dead_c()}"
 
 
