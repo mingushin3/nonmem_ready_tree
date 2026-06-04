@@ -14,7 +14,9 @@
 색: --hl-single #FFD700→진한 앰버(#E8820C, 실선) · --hl-cond #FFF8B0→청록(#15B4C7, 점선).
     의미(실선=자동 진행 / 점선=질문 Q로 갈리는 갈림길)는 유지하고 색만 교체 → Lock7/index.html 무영향.
 """
+import json
 import os
+import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -381,6 +383,153 @@ def build_glossary():
 GLOSSARY = build_glossary()
 
 
+# ═════════════════════════════════════════════════════════════════════════════
+# 2.5 쉬운 LLM 지시문 + R 골격(EASY) — 파일럿 6개
+#     정본 spec/c_units.json을 직접 읽어(무수정) 대학 1학년용 카드를 결정적으로 생성한다.
+#     카드 = 🎯목표/🧩쉬운설명/📥입력📤출력/(detect)보기별 행선지/🤖복사용 LLM 요청문/📜R 골격.
+#     ★ goal/explain/input/output 만 사람이 큐레이트(_EASY_SEED). 나머지(보기 행선지·요청문·R)는
+#       정본 필드(srp_intent·llm_prompt·verify_visualization·before_after·r_snippet)에서 파생 →
+#       hallucination/Lock4 무위반. renderCPanel은 EASY[id]가 있으면 쉬운 카드, 없으면 기존 표시.
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _load_raw_cunits() -> dict:
+    d = json.loads((B.ROOT / "spec" / "c_units.json").read_text(encoding="utf-8"))
+    if isinstance(d, dict):
+        d = d.get("c_units", list(d.values()))
+    return {e["c_id"]: e for e in d}
+
+
+_RAW = _load_raw_cunits()
+
+EASY_PILOT = ["c0210", "c0201", "c0203", "c0011", "c0120", "c0110"]
+
+# 사람 큐레이트(쉬운 말). 코드/행선지/계약은 정본 파생이라 여기 없음.
+_EASY_SEED = {
+    "c0210": {
+        "goal": "내 파일이 8가지 형식 중 무엇인지 알아내고, 컴퓨터가 ‘표로 읽을 수 있는지’ 판정한다.",
+        "explain": "정리를 시작하려면 먼저 파일이 표(행·열)로 열리는지부터 확인해야 해요. CDISC 표준인지, "
+                   "CRO가 준 엑셀인지, 아니면 스캔한 PDF처럼 아예 표가 아닌지에 따라 다음 작업이 완전히 "
+                   "달라집니다. 표가 아니거나(NON-TABULAR) 깨졌으면(CORRUPTED) 여기서 정직하게 멈춥니다.",
+        "input": "파일 그 자체 — 확장자, 시트 구조, 첫 줄(헤더) 모양",
+        "output": "형식 이름 하나 (meta$a10_state) — 예: 'CRO-VENDOR'",
+    },
+    "c0201": {
+        "goal": "이 데이터가 연구 하나인지, 여러 연구를 합친 것인지 판정한다.",
+        "explain": "여러 연구를 합쳐 분석할 때는 환자 번호가 겹치지 않게 통일해야 해요. 그래서 먼저 ‘연구가 "
+                   "몇 개인가’부터 봅니다. 합칠 때 번호 충돌을 풀 규칙이 없으면 사람에게 물어봐야 합니다(Q05).",
+        "input": "시트·파일 목록과 연구 식별자(study id)",
+        "output": "통합 수준 하나 (meta$a1_state) — SINGLE 또는 MULTI-*",
+    },
+    "c0203": {
+        "goal": "사건이 ‘언제’ 일어났는지, 시간을 어떻게 쓸지 정한다(실제/예정/경과 등).",
+        "explain": "약을 언제 먹고 언제 채혈했는지는 PK 분석의 핵심이에요. 실제 시각이 있는지, 예정 시각만 "
+                   "있는지, 투약 후 경과시간인지에 따라 TIME 열을 만드는 방법이 달라집니다. 해석이 갈리면 "
+                   "사람이 정하고(Q02), 시간이 아예 없으면 되살릴 수 없습니다(INVALID).",
+        "input": "시간 관련 열(날짜·시각·nominal time)과 기준점(anchor) 정보",
+        "output": "시간 정책 하나 (meta$a3_state) — 예: 'ACTUAL-PREFERRED'",
+    },
+    "c0011": {
+        "goal": "각 행이 ‘측정값 없음(MDV=1)’인지 ‘유효 관측(MDV=0)’인지 표시하는 열을 만든다.",
+        "explain": "NONMEM은 어떤 행이 실제 측정이고 어떤 행이 투약·결측인지 MDV 열로 구분해요. 투약·리셋 "
+                   "행(EVID 1~4)은 측정이 아니니 MDV=1, 관측 행(EVID=0)은 값이 있으면 MDV=0, 비어 있으면 "
+                   "MDV=1로 채웁니다. 값을 새로 ‘지어내지’ 않습니다.",
+        "input": "EVID 열, 농도값(dv_value) 열",
+        "output": "MDV 열(0 또는 1) 추가",
+    },
+    "c0120": {
+        "goal": "옆으로 펼쳐진(wide) 농도 표를 NONMEM이 원하는 ‘세로로 긴(long)’ 표로 바꾼다.",
+        "explain": "농도가 ‘Time, DRUG_A, DRUG_B …’처럼 분석물질마다 열로 펼쳐져 있으면 NONMEM이 못 읽어요. "
+                   "한 행에 (시간, 분석물질, 농도) 하나씩 들어가도록 녹여야 합니다. 진단 마법사가 ‘표를 "
+                   "정리하라(WU3 pivot)’고 할 때 하는 작업이에요.",
+        "input": "wide 농도 표 — 분석물질(또는 개체)이 열로 펼쳐짐",
+        "output": "long 표 — analyte_label·dv_value 열로 녹임(행 수 = 원본 × 분석물질 수)",
+    },
+    "c0110": {
+        "goal": "따로 있는 투약 시트를 농도 표(main)에 공통 키로 붙인다.",
+        "explain": "투약 기록과 농도 측정이 서로 다른 시트에 있을 때가 많아요. 같은 환자·방문을 가리키는 "
+                   "공통 키(subject_id, visit)로 두 표를 합쳐야 한 줄에 ‘언제 얼마 투약하고 얼마 측정됐는지’가 "
+                   "모입니다. 마법사의 WU4 dose-join이 이 작업입니다.",
+        "input": "농도 표(main) + 투약 시트 + 공통 키(c0100에서 식별)",
+        "output": "투약 정보(dose_amount, admin_route)가 붙은 통합 표",
+    },
+}
+
+_AXIS_RE = re.compile(r"a(\d+)_state")
+_ARROW_RE = re.compile(r"([A-Z][A-Z0-9\-]+)\s*→\s*(UNSUPPORTED|INVALID|Q\d+[A-Z]?)")
+
+
+def _axis_of(raw: dict):
+    """output_schema_delta의 '+meta[\'aN_state\']'에서 축 ID(A0..A10)를 추출(정본 파생)."""
+    m = _AXIS_RE.search(raw.get("output_schema_delta", "") or "")
+    return ("A" + m.group(1)) if m else None
+
+
+def _easy_states(raw: dict, axis):
+    """detect/axis-eval c의 보기별 행선지. 종료 매핑은 정본 llm_prompt의 'STATE→TERMINAL' 화살표에서만 취득."""
+    if not axis or raw.get("kind") != "detect":
+        return None
+    tmap = dict(_ARROW_RE.findall(raw.get("llm_prompt", "") or ""))
+    out = []
+    for s in B.AXIS_STATES.get(axis, []):
+        to = tmap.get(s)
+        route = "go" if to is None else ("ask" if to.startswith("Q") else "stop")
+        out.append({"code": s, "plain": GLOSSARY["state"].get(axis + "::" + s) or "",
+                    "route": route, "to": to})
+    return out
+
+
+def _r_skeleton(raw: dict) -> str:
+    """r_snippet 노출. detect의 미정의 helper 호출(예: detect_source_format)은 TODO 주석으로 전개."""
+    r = raw.get("r_snippet", "") or ""
+    if raw.get("kind") == "detect" and "<-" in r and "::" not in r and "(" in r:
+        return ("# TODO: 아래 판별 로직(함수)을 직접 구현하세요 "
+                "— ④의 🤖 요청문을 LLM에 주면 이 함수를 만들어 줍니다.\n" + r)
+    return r
+
+
+def _llm_request(raw: dict, seed: dict, states) -> str:
+    """복사용 LLM 요청문 — 목표·입력·동작·보기·예시·출력계약·형식을 묶어 실행가능 R 산출을 유도."""
+    action = " · ".join(_PLAIN_VOCAB.get(t, t) for t in str(raw.get("srp_intent", "")).split())
+    ba = raw.get("before_after_toy_example") or {}
+    lines = [
+        "[목표] " + seed["goal"],
+        "[내 데이터] " + seed["input"],
+        "[해야 할 일] " + action + ".",
+    ]
+    if states:
+        opts = "; ".join("%s = %s" % (s["code"], (s["plain"].split("→")[0].strip() or s["code"]))
+                         for s in states)
+        lines.append("[분류 보기] 아래 중 정확히 하나로 판정하고, 판별 규칙을 코드에 담아줘 — " + opts)
+    if ba.get("before"):
+        lines.append("[예시] 입력 « %s » → 출력 « %s »"
+                     % (str(ba.get("before", "")).replace("\n", " / "),
+                        str(ba.get("after", "")).replace("\n", " / ")))
+    lines.append("[결과(출력 계약)] " + seed["output"]
+                 + ("; 표로 읽을 수 없으면 왜 안 되는지 사유 문자열도 함께 반환." if states else "."))
+    lines.append("[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. "
+                 "각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). "
+                 "도우미 함수가 필요하면 정의까지 포함해줘.")
+    return "\n".join(lines)
+
+
+def easy_card(raw: dict) -> dict:
+    seed = _EASY_SEED[raw["c_id"]]
+    axis = _axis_of(raw)
+    states = _easy_states(raw, axis)
+    vv = raw.get("verify_visualization") or {}
+    return {
+        "goal": seed["goal"], "explain": seed["explain"],
+        "input": seed["input"], "output": seed["output"],
+        "axis": axis, "states": states,
+        "pass_to": vv.get("pass_route_to"), "fail_to": vv.get("fail_route_to"),
+        "llm_request": _llm_request(raw, seed, states),
+        "r_skeleton": _r_skeleton(raw),
+    }
+
+
+EASY = {cid: easy_card(_RAW[cid]) for cid in EASY_PILOT}
+
+
 def assert_glossary_complete():
     """ELES/CUNITS/QINFO/AXIS_STATES에 등장하는 모든 코드가 쉬운 말을 갖는지 검사(누락 시 빌드 실패)."""
     g = GLOSSARY
@@ -463,6 +612,23 @@ _EXTRA_CSS = """
   .gloss-sec h3{font-size:12.5px;margin:0 0 5px;color:#3a4651;border-bottom:1px solid var(--line);padding-bottom:3px}
   .gloss-row{font-size:12px;margin:3px 0;line-height:1.5}
   .gloss-row .gc{font-family:Consolas,monospace;font-size:11px;color:#1b4f8a;background:#eaf1fb;border-radius:4px;padding:0 5px;margin-right:6px}
+  /* 쉬운 카드(EASY) + 궤도복귀/경로 breadcrumb */
+  .easygoal{font-size:13.5px;font-weight:700;color:#16314f;background:#fff7ec;border:1px solid #f0d6ad;border-radius:6px;padding:7px 9px;margin-bottom:6px;line-height:1.5}
+  .easyexp{font-size:12.5px;color:#3a4651;line-height:1.7;margin-bottom:7px}
+  .straw{font-size:12px;line-height:1.7;padding:3px 0;border-bottom:1px dashed #eef2f7}
+  .termstop{display:inline-block;font-size:11px;color:#455a64;background:#eceff1;border:1px solid #b0bec5;border-radius:5px;padding:0 6px;cursor:help}
+  .llmreq{white-space:pre-wrap;background:#f7faff;border:1px solid #cfe0f5;border-radius:7px;padding:10px 11px;font-size:12px;line-height:1.65;color:#1f3550;font-family:Consolas,monospace;margin-top:6px}
+  .copybtn{font-size:11px;padding:2px 8px;margin-bottom:2px}
+  .rescard.onramp{background:#eef6ff;border-color:#bcd6f0}
+  .rescard .step{margin-top:9px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:7px;font-size:12.5px;line-height:1.65}
+  .rescard .manual{font-size:11px;color:#b3541e;background:#fff1e6;border:1px solid #f0c9a8;border-radius:5px;padding:1px 6px;margin-left:4px}
+  .breadcrumb{margin:7px 0;padding:7px 9px;background:#fffaf2;border:1px solid #f0dcc0;border-radius:7px;font-size:12px;line-height:2.1}
+  .breadcrumb.dotted{background:#f4f8fc;border-style:dashed;border-color:#bcd2f0}
+  .pnode{display:inline-block;font-weight:700;font-size:11px;border-radius:5px;padding:1px 7px}
+  .pnode.start{background:#ffe1a8;color:#7a4b00}
+  .pnode.goal{background:#43a047;color:#fff}
+  .parrow{color:#E8820C;font-weight:700}
+  .parrow.d{color:#7d9bbb}
 """
 
 
@@ -512,6 +678,20 @@ _V2_OVERRIDE = r'''<script>
   }
   function qChip(q){ return '<span class="pill q codechip" data-tip="'+E(gloss("qcode",q)||q)+'">'+E(q)+'</span>'; }
   function stateChip(ax, s){ return '<span class="pill codechip" data-tip="'+E(gloss("state", ax+"::"+s)||s)+'">'+E(s)+'</span>'; }
+  /* onward 라우팅 해소(모든 노드): 통과=c칩/친절문구 · 막힘=질문(Q) vs ✋정당한 종료 구분 */
+  function isCid(x){ return /^c\d{4}$/.test(String(x||"")); }
+  function isQc(x){ return /^Q\d+[A-Z]?$/.test(String(x||"")); }
+  function passChip(p){
+    if(!p) return '<span class="pill pass">다음 작업으로 계속</span>';
+    if(isCid(p)) return '<span class="pill pass">→</span> '+chip(p,"c");
+    if(String(p)==="next axis") return '<span class="pill pass">다음 축 평가로 계속 → 🏁</span>';
+    return '<span class="pill pass">'+E(p)+'</span>';
+  }
+  function failChip(f){
+    if(!f) return '<span class="pill">없음(이 작업은 막히지 않음)</span>';
+    if(isQc(f)) return qChip(f);
+    return '<span class="termstop" data-tip="자동 처리 대상이 아니라 여기서 정직하게 종료합니다(결함이 아니라 정당한 종료).">✋ 정당한 종료 · '+E(f)+'</span>';
+  }
   function colorNote(){
     return '<div class="colornote">길 색 안내 — <b class="amb">굵은 앰버 실선</b> = 자동으로 흘러가는 <b>기본 경로</b>(사람 손 불필요) · '
          + '<b class="tl">청록 점선</b> = 여기서 문제가 있으면 <b>‘사람이 결정해야 하는 질문(Q)’</b>으로 빠지는 갈림길.</div>';
@@ -521,6 +701,7 @@ _V2_OVERRIDE = r'''<script>
   /* ---- (c 패널) 변환/감지/검사/분기 — 쉬운 말 4섹션 ---- */
   window.renderCPanel = function(id){
     var c=CUNITS[id]; if(!c) return window.renderNodePanel(id,"node");
+    if(window.EASY && EASY[id]) return renderEasyCPanel(id, c, EASY[id]);
     var h=colorNote();
     var chk=(c.precondition_checklist_ko||[]).map(function(t,i){
       return '<li><input type="checkbox" class="ckbox" data-i="'+i+'" id="ck'+i+'"><label for="ck'+i+'">'+E(t)+'</label></li>';
@@ -555,14 +736,51 @@ _V2_OVERRIDE = r'''<script>
     if(!vv){
       var q=(canQ||[]);
       return '<div class="muted">이 작업은 ‘검사’가 아니라 변환/분기라 검사 장면이 없습니다.</div>'
-        + (q.length ? kv("막히면 갈 수 있는 질문", q.map(qChip).join(" ")) : "");
+        + (q.length ? kv("막히면 갈 수 있는 질문", q.map(qChip).join(" "))
+                    : kv("다음", '<span class="pill pass">정리 후 다음 작업으로 계속 → 🏁</span>'));
     }
     var h=kv("검사 대상 열", (vv.target_columns||[]).map(function(x){return '<span class="pill">'+E(x)+'</span>';}).join(" "));
     h+=kv("합격 기준", E(vv.criterion_predicate_ko));
-    h+=kv("통과하면 →", '<span class="pill pass">'+E(vv.pass_route_to||"다음 작업")+'</span>');
-    h+=kv("막히면(실패) →", vv.fail_route_to ? qChip(vv.fail_route_to) : '<span class="pill">없음</span>');
+    h+=kv("통과하면 →", passChip(vv.pass_route_to));
+    h+=kv("막히면(실패) →", failChip(vv.fail_route_to));
     return h;
   };
+
+  /* ---- (쉬운 카드) 파일럿 c — 🎯목표/🧩설명/보기 행선지/🤖요청문/R 골격 ---- */
+  function renderEasyCPanel(id, c, ez){
+    var h=colorNote();
+    var chk=(c.precondition_checklist_ko||[]).map(function(t,i){
+      return '<li><input type="checkbox" class="ckbox" data-i="'+i+'" id="ck'+i+'"><label for="ck'+i+'">'+E(t)+'</label></li>';
+    }).join("");
+    h+=sect("① 시작 전 — 내 데이터가 이 작업을 받을 준비가 됐는지 확인",
+            '<ul class="chklist" id="chk">'+chk+'</ul><div class="badge-ok" id="chkbadge">✓ 위치 확인됨</div>');
+    var b='<div class="easygoal">🎯 '+E(ez.goal)+'</div>';
+    b+='<div class="easyexp">🧩 '+E(ez.explain)+'</div>';
+    b+=kv("📥 들어오는 것(입력)", E(ez.input));
+    b+=kv("📤 나가는 것(출력)", E(ez.output));
+    b+=kv("작업 종류", E(gloss("kind",c.kind))+" "+chip(c.kind,"kind"));
+    b+=kv("원래 코드", chip(c.c_id,"c")+' · <span class="muted">근거</span> '+E(c.ref));
+    h+=sect("② 이 작업이 무슨 일을 하나 (쉬운 말)", b);
+    if(ez.states){
+      var rows=ez.states.map(function(s){
+        var rt = (s.route==="go") ? '<span class="pill pass">→ 계속</span>'
+               : (s.route==="ask") ? ('→ '+qChip(s.to))
+               : ('<span class="termstop">✋ 정당한 종료 · '+E(s.to)+'</span>');
+        return '<div class="straw">'+stateChip(ez.axis,s.code)+' <span class="muted">'+E(s.plain||"")+'</span> '+rt+'</div>';
+      }).join("");
+      h+=sect("③ 보기 — 내 파일이 어디에 해당하고, 그러면 어디로 가나",
+              rows+'<div style="margin-top:7px">'+kv("통과하면 →", passChip(ez.pass_to))+kv("막히면 →", failChip(ez.fail_to))+'</div>');
+    }else{
+      h+=sect("③ 고치기 전 / 후 — 앰버 칸이 바뀐 부분", renderBeforeAfter(c.before,c.after));
+    }
+    h+=sect("④ 🤖 LLM에게 이대로 복사해 요청하세요 — 이 작업에 맞는 R 스크립트를 만들어 줍니다",
+            '<button class="btn copybtn" data-copy="llmreq_'+E(id)+'">📋 복사</button>'
+            +'<pre class="llmreq" id="llmreq_'+E(id)+'">'+E(ez.llm_request)+'</pre>');
+    h+=sect("⑤ 참고 코드 골격 (위 요청문으로 받은 R을 검증·비교할 때 — 위 R · 아래 Python)",
+            '<div class="snlabel">R</div><pre class="snip">'+hlComments(ez.r_skeleton)+'</pre>'
+            +'<div class="snlabel">Python</div><pre class="snip">'+hlComments(c.python_snippet)+'</pre>');
+    return h;
+  }
 
   /* ---- (Q 패널) 질문(Q-code) — 쉬운 말 ---- */
   window.renderQPanel = function(id){
@@ -670,6 +888,25 @@ _V2_OVERRIDE = r'''<script>
     cseq.forEach(function(c){ ((CUNITS[c]||{}).can_route_to_q||[]).forEach(function(q){ qset[q]=1; }); });
     return {faithful:faithful, entry:"N0", c_sequence:cseq, qcodes:Object.keys(qset), honest_stop:!faithful};
   }
+  /* 표가 tidy가 됐다고 가정했을 때의 경로(=궤도 복귀 후 '예상 경로'). wizardVerdict의 faithful 분기와 동일 규칙. */
+  function projectedFaithfulSeq(a){
+    var chosen={};
+    WIZARD.file_property_c.forEach(function(c){ chosen[c]=1; });
+    WIZARD.data_dependent_c.forEach(function(c){
+      var req=WIZARD.precond[c];
+      var ok=(req==="none")||(req==="time")||(req==="dv")||(req==="subject+time+dv" && !!a.has_subject);
+      if(ok) chosen[c]=1;
+    });
+    return WIZARD.canon_order.filter(function(c){ return chosen[c]; });
+  }
+  /* 출발점 N0 → c들 → 🏁 nonmem-ready 까지의 경로를 한 줄로. dotted=true 면 '예상 경로'(점선). */
+  function pathBreadcrumb(seq, dotted){
+    var arrow=dotted?' <span class="parrow d">⇢</span> ':' <span class="parrow">→</span> ';
+    var parts=['<span class="pnode start">N0</span>'];
+    (seq||[]).forEach(function(c){ parts.push('<span class="cchip" data-node="'+E(c)+'">'+E(c)+'</span>'); });
+    parts.push('<span class="pnode goal">🏁 nonmem-ready</span>');
+    return '<div class="breadcrumb'+(dotted?' dotted':'')+'">'+parts.join(arrow)+'</div>';
+  }
   function buildWizard(){
     var mask=document.createElement("div"); mask.id="wizMask";
     var qhtml=WQ.map(function(w){
@@ -712,8 +949,9 @@ _V2_OVERRIDE = r'''<script>
     var html="";
     if(v.faithful){
       var qhtml=v.qcodes.length? v.qcodes.map(qChip).join(" ") : '<span class="muted">없음(축이 깨끗하면 질문 없이 통과)</span>';
-      html+='<div class="rescard ok"><h4>✅ 시작 지점: <b>N0</b> — 모든 파일이 여기서 출발합니다</h4>'
-        +'당신 파일은 <b>깔끔한 tidy 표</b>라, 도구가 자동 정리 밴드로 들어갑니다. 트리에서 켜진 길을 따라가 보세요.'
+      html+='<div class="rescard ok"><h4>✅ 시작 지점: <b>N0</b> → 따라가면 <b>🏁 nonmem-ready</b></h4>'
+        +'당신 파일은 <b>깔끔한 tidy 표</b>라 도구가 자동 정리 밴드로 들어갑니다. 아래 길을 끝까지 따라가면 완성에 도달합니다.'
+        + pathBreadcrumb(v.c_sequence, false)
         +'<div style="margin-top:8px"><b>이 파일에 적용되는 정리·검사 작업</b> (클릭하면 설명):<br>'+cSeqChips(v.c_sequence)+'</div>'
         +'<div style="margin-top:8px"><b>정리하면서 마주칠 수 있는 결정 질문(Q)</b>:<br>'+qhtml+'</div>'
         +'<div style="margin-top:8px" class="muted">파일만으로 풀리는 축: <b>A1 / A3 / A5 / A10</b>. 나머지(A0 / A2 / A4 / A6 / A7 / A8 / A9)는 '
@@ -726,11 +964,13 @@ _V2_OVERRIDE = r'''<script>
       if(a.bw_sheet || a.qa || a.param || a.subject_wide){ wus.push("WU4 dose-bw-join(체중/용량 시트 결합)"); }
       if(!a.qa && !a.param && !a.subject_wide){ reasons.push("알 수 없는 구조(tidy로 못 읽음)"); }
       var uniq=wus.filter(function(x,i){ return wus.indexOf(x)===i; });
-      html+='<div class="rescard stop"><h4>⛔ 여기서 막힙니다 — ‘구조 인식’ 단계 (GAP-37)</h4>'
-        +'당신 파일은 아직 도구가 자동으로 다루는 <b>깔끔한 tidy 표</b>가 아닙니다. 먼저 표 모양을 정리해야 합니다.'
+      var proj=projectedFaithfulSeq(a);
+      html+='<div class="rescard onramp"><h4>🛟 궤도 복귀 경로 — 막다른 길이 아닙니다</h4>'
+        +'당신 파일은 아직 도구가 자동으로 다루는 <b>깔끔한 tidy 표</b>가 아닙니다. 하지만 dead-end가 아니라, 아래 <b>2단계</b>로 궤도에 올리면 <b>🏁 nonmem-ready</b>까지 갈 수 있어요.'
         +'<div style="margin-top:8px"><b>감지된 이유</b>: '+(reasons.length?reasons.map(E).join(" / "):"—")+'</div>'
-        +'<div style="margin-top:8px"><b>먼저 할 일(recipe)</b>:<br>'+(uniq.length?uniq.map(E).join("<br>"):"—")+'</div>'
-        +'<div style="margin-top:8px">지금 도구가 자동 진단하는 작업: '+cSeqChips(v.c_sequence)+' <span class="muted">(파일 속성만)</span></div>'
+        +'<div class="step"><b>1단계 — 표 정리(on-ramp)</b> <span class="manual">⚠️ 이 정리는 아직 도구가 자동으로 못 함 — 당신/LLM이 먼저 (GAP-37)</span><br>'+(uniq.length?uniq.map(E).join("<br>"):"—")+'</div>'
+        +'<div class="step"><b>2단계 — 표가 tidy가 되면 이어지는 자동 경로</b> <span class="muted">(아래는 <b>예상 경로</b> · 점선)</span>'+pathBreadcrumb(proj, true)+'</div>'
+        +'<div style="margin-top:8px">지금 도구가 자동으로 진단하는 작업: '+cSeqChips(v.c_sequence)+' <span class="muted">(파일 속성만 — 1단계 정리 전이라 여기까지)</span></div>'
         +'<div style="margin-top:8px" class="muted">✅ 정확한 자동 진단은 정본 Python 어댑터로: <span class="mono">python -m src.adapter &lt;내파일.xlsx&gt; --recipe</span></div></div>';
     }
     box.innerHTML=html;
@@ -740,7 +980,7 @@ _V2_OVERRIDE = r'''<script>
         if(n && n.length){ closeWiz(); onNodeTap(n); }
       });
     });
-    var ids=["N0"].concat(v.c_sequence).concat(v.qcodes);
+    var ids=["N0"].concat(v.c_sequence).concat(v.qcodes||[]).concat(["AUTO"]);
     highlightSet(ids);
   }
   function highlightSet(ids){
@@ -831,6 +1071,16 @@ _V2_OVERRIDE = r'''<script>
   redrawLegend();
   var wb=document.getElementById("wizardBtn"); if(wb) wb.addEventListener("click", openWiz);
   var gb=document.getElementById("glossBtn"); if(gb) gb.addEventListener("click", function(){ document.getElementById("glossMask").classList.add("on"); });
+  /* 🤖 요청문 복사 버튼(이벤트 위임 — 패널은 매번 새로 그려지므로) */
+  document.addEventListener("click", function(e){
+    var btn=(e.target && e.target.closest) ? e.target.closest(".copybtn") : null;
+    if(!btn) return;
+    var el=document.getElementById(btn.getAttribute("data-copy")); if(!el) return;
+    var txt=el.innerText||el.textContent||"";
+    function flash(){ var t=btn.getAttribute("data-lbl"); if(!t){ t=btn.textContent; btn.setAttribute("data-lbl",t); } btn.textContent="✓ 복사됨"; setTimeout(function(){ btn.textContent=t; },1200); }
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(flash, flash); }
+    else { try{ var r=document.createRange(); r.selectNodeContents(el); var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r); document.execCommand("copy"); }catch(_){ } flash(); }
+  });
   if(state && state.selected){
     var sn=cy.getElementById(state.selected);
     if(sn && sn.length){ try{ onNodeTap(sn); }catch(e){} }
@@ -862,6 +1112,7 @@ def build_html() -> str:
         "var DT_BANNER=" + B.js(B.BANNER) + ";\n"
         "var WIZARD=" + B.js(WIZARD) + ";\n"
         "var GLOSSARY=" + B.js(GLOSSARY) + ";\n"
+        "var EASY=" + B.js(EASY) + ";\n"
         "</script>\n"
     )
     return page_head_v2() + "\n" + B.LIBS + "\n" + data_script + app_js_v2() + B.PAGE_TAIL

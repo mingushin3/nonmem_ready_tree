@@ -118,6 +118,23 @@
   .gloss-sec h3{font-size:12.5px;margin:0 0 5px;color:#3a4651;border-bottom:1px solid var(--line);padding-bottom:3px}
   .gloss-row{font-size:12px;margin:3px 0;line-height:1.5}
   .gloss-row .gc{font-family:Consolas,monospace;font-size:11px;color:#1b4f8a;background:#eaf1fb;border-radius:4px;padding:0 5px;margin-right:6px}
+  /* 쉬운 카드(EASY) + 궤도복귀/경로 breadcrumb */
+  .easygoal{font-size:13.5px;font-weight:700;color:#16314f;background:#fff7ec;border:1px solid #f0d6ad;border-radius:6px;padding:7px 9px;margin-bottom:6px;line-height:1.5}
+  .easyexp{font-size:12.5px;color:#3a4651;line-height:1.7;margin-bottom:7px}
+  .straw{font-size:12px;line-height:1.7;padding:3px 0;border-bottom:1px dashed #eef2f7}
+  .termstop{display:inline-block;font-size:11px;color:#455a64;background:#eceff1;border:1px solid #b0bec5;border-radius:5px;padding:0 6px;cursor:help}
+  .llmreq{white-space:pre-wrap;background:#f7faff;border:1px solid #cfe0f5;border-radius:7px;padding:10px 11px;font-size:12px;line-height:1.65;color:#1f3550;font-family:Consolas,monospace;margin-top:6px}
+  .copybtn{font-size:11px;padding:2px 8px;margin-bottom:2px}
+  .rescard.onramp{background:#eef6ff;border-color:#bcd6f0}
+  .rescard .step{margin-top:9px;padding:8px 10px;background:#fff;border:1px solid var(--line);border-radius:7px;font-size:12.5px;line-height:1.65}
+  .rescard .manual{font-size:11px;color:#b3541e;background:#fff1e6;border:1px solid #f0c9a8;border-radius:5px;padding:1px 6px;margin-left:4px}
+  .breadcrumb{margin:7px 0;padding:7px 9px;background:#fffaf2;border:1px solid #f0dcc0;border-radius:7px;font-size:12px;line-height:2.1}
+  .breadcrumb.dotted{background:#f4f8fc;border-style:dashed;border-color:#bcd2f0}
+  .pnode{display:inline-block;font-weight:700;font-size:11px;border-radius:5px;padding:1px 7px}
+  .pnode.start{background:#ffe1a8;color:#7a4b00}
+  .pnode.goal{background:#43a047;color:#fff}
+  .parrow{color:#E8820C;font-weight:700}
+  .parrow.d{color:#7d9bbb}
 
 </style>
 </head>
@@ -4409,6 +4426,7 @@ var DT_STATS={"nodes_total":100,"backbone_process_nodes":8,"axis_nodes":11,"axis
 var DT_BANNER={"total_strands":5000,"wired_c":57,"auto":5,"repair":230,"complete":235,"quarantine":3380,"invalid":862,"unsupported":523,"realized_pure":3228,"unwired_c":62,"static_q":2,"deferred_total":7};
 var WIZARD={"file_property_c":["c0201","c0210"],"data_dependent_c":["c0203","c0205","c0211","c0212","c0214","c0215","c0216","c0305","c0310","c0312","c0314"],"canon_order":["c0201","c0203","c0205","c0210","c0211","c0212","c0214","c0215","c0216","c0305","c0310","c0312","c0314"],"qa_tokens":["standard","dblk"," blk","blk ","lqc","mqc","hqc","calibration"," qc","qc ","blank","dilution","spike"],"shape_priority":["qa-contaminated","param-summary","subject-wide","tidy-long","unknown"],"precond":{"c0201":"none","c0210":"none","c0214":"none","c0215":"none","c0216":"none","c0314":"none","c0203":"time","c0310":"time","c0312":"time","c0205":"dv","c0211":"dv","c0305":"dv","c0212":"subject+time+dv"},"wu_map":{"qa":"QA-strip","param":"param-summary-reserve","subject_wide":"pivot-wide-to-long","dose_bw":"dose-bw-join"},"patterns":{"tidy":"헤더에 '시간'(time/시간/nominal) 열과 '농도'(conc/DV/농도/observation) 열이 둘 다","subject_wide":"헤더에 개체(subject/animal/개체/동물/ID)류 열이 2개 이상","param_summary":"셀에 'Parameter'와 'Unit'(단위)이 함께 (값은 Mean)","qa":"첫 열에 Standard/DBLK/BLK/QC/Calibration/Blank 등 검량·QA 행"}};
 var GLOSSARY={"axis":{"A0":"분석 목적 — 무엇을 분석하나(PK·집단PK·PK/PD 등)와 endpoint 종류가 적혀 있나?","A1":"연구 통합 — 한 연구인가, 여러 연구를 합치나(합치면 환자번호 통일 필요)?","A2":"연구 설계 — 평행군·교차·생동성·전임상 등 어떤 구조인가?","A3":"시간 — 사건이 '언제' 일어났는지 정할 수 있나(실제/예정/경과)?","A4":"투약 완전성 — 모든 용량이 적혀 있고 충돌은 없나?","A5":"관측/BLQ — 관측값이 있고, BLQ·LLOQ·ULOQ·반복 처리가 정해져 있나?","A6":"행 분류 — 투약 행과 관측 행을 분명히 나눌 수 있나?","A7":"공변량 — 필요한 공변량이 있고 붙일(연결) 수 있나?","A8":"약물/구획 — 약·대사체가 몇 개이고 구획 번호가 정해졌나?","A9":"결함 복구 — 중복·정렬·인코딩 같은 구조 결함을 고칠 수 있나?","A10":"원본 형식 — 파일이 어떤 형식이고 안정적으로 읽을 수 있나?"},"state":{"A0::AIC-MISSING":"분석 목적이 안 적힘 → 무엇을 분석하는지 먼저 밝혀야 함(Q11)","A0::AIC-PK":"기본 약동학(PK) 분석","A0::AIC-POPPK":"집단 PK(popPK) — '회차(occasion)' 구분 필요","A0::AIC-PKPD":"약물 농도와 효과를 잇는 PK/PD 분석","A0::AIC-ER":"노출(exposure)–반응 분석 — 노출 지표 미리 계산 필요","A0::AIC-DDI":"약물 상호작용(DDI) 분석","A0::AIC-PEDS":"소아 분석 — 용량 재구성 정책 필요","A0::AIC-SPECIAL":"특수집단(신장/간장애 등) 분석","A0::AIC-CUSTOM":"표준에 없는 맞춤 목적 — 정책 문서 필요","A1::SINGLE":"연구 하나 — 통합 작업 불필요","A1::MULTI-HOMO":"같은 설계의 여러 연구 — 합치는 규칙 필요(없으면 Q05)","A1::MULTI-HETERO":"설계가 다른 여러 연구 — 합치는 규칙 필요(없으면 Q05)","A1::MULTI-SITE":"같은 연구의 여러 기관 — 환자번호 통일 필요(없으면 Q05)","A1::INTERIM":"중간분석 시점 데이터 — 누적(pooling) 규칙 필요","A2::PARALLEL":"평행군 설계(군마다 다른 처치)","A2::SAD-MAD":"단회/반복 용량 증량 시험","A2::CROSSOVER":"교차 설계(한 사람이 여러 처치, 휴약기)","A2::BE":"생물학적 동등성 시험(대조약 vs 시험약)","A2::DDI":"약물 상호작용 시험","A2::FOOD-EFFECT":"음식 영향 시험(공복 vs 식후)","A2::SPECIAL-POP":"특수집단 시험","A2::PEDIATRIC":"소아 시험(체중/체표면적 기반 용량)","A2::TDM-RWD":"치료약물모니터링/실세계데이터(환자 진술 기반 가능)","A2::PRECLINICAL":"전임상(동물) 시험","A3::ACTUAL":"실제 측정된 시각(벽시계 시간)","A3::NOMINAL-ONLY":"예정된 시각만 있음(실제 기록 없음)","A3::ACTUAL-PREFERRED":"둘 다 있고 실제 시각을 사용","A3::NOMINAL-PREFERRED":"둘 다 있고 예정 시각을 사용","A3::ELAPSED":"투약 이후 경과시간(상대 시간)","A3::INTERVAL":"구간으로 기록된 시간(예: 2~4시간)","A3::AMBIGUOUS":"시간 해석이 여러 가지로 갈려 애매함 → 사람이 정해야 함(Q02)","A3::UNRECOVERABLE":"시간 정보가 아예 없어 되살릴 수 없음 → 진행 불가(Q12/INVALID)","A4::COMPLETE":"모든 투약이 완비됨 → 자동 진행","A4::WEIGHT-BASED":"체중당 용량(mg/kg) — 재구성 정책 필요","A4::BSA-BASED":"체표면적당 용량(mg/m²) — 정책 필요","A4::PLANNED-FALLBACK":"실제가 없으면 예정 용량 사용","A4::ADDL-II":"등간격 반복 투약(ADDL/II로 압축)","A4::ADDL-ACTUAL-CONFLICT":"반복 투약 정보와 실제 투약이 어긋남 → 우선순위 결정 필요(Q14)","A4::TITRATION-ADAPTIVE":"용량 조절(적정) — 정책 없으면 질문(Q08)","A4::LOADING-MAINTENANCE":"부하+유지 용량 — 정책 없으면 질문(Q08)","A4::INFUSION-STOP-RESTART":"정맥주입 중단/재개·속도변경 — 정책 없으면 질문(Q04)","A4::PARTIAL-RECOVERY":"일부 투약만 있음 → 나머지 추정·표시","A4::COMBINATION":"여러 약 병용 — 경로/구획 정책 필요","A4::MISSING-NO-POLICY":"투약 기록 없고 복원 규칙도 없음 → 질문(Q08)","A4::UNRECOVERABLE":"필수 투약 정보가 없어 되살릴 수 없음 → 진행 불가","A5::CLEAN":"관측값 깨끗함(BLQ 없음) → 자동 진행","A5::BLQ-FLAGGED":"BLQ가 플래그로 표시 + 정책 있음 → 정리 가능","A5::BLQ-TEXT":"BLQ가 글자로(<0.1, 'BLQ') → 해석·정규화","A5::BLQ-ZERO":"BLQ가 0으로 표시 → 진짜 0과 구분 필요","A5::MULTI-ANALYTE":"여러 분석물질(모약물·대사체) — 구획 정책 필요","A5::LLOQ-CHANGED":"정량하한(LLOQ)이 중간에 바뀜 → 표시·정리","A5::MISSING-MDV1":"관측 결측 → MDV=1로 표시(자동)","A5::BIOANALYTICAL-FINAL-FLAG-MISSING":"여러 분석 결과 중 최종본 표시 없음 → 질문(Q15D)","A5::ABOVE-ULOQ":"정량상한(ULOQ) 초과 + 정책 있음 → 정리 가능","A5::ABOVE-ULOQ-NO-POLICY":"ULOQ 초과인데 처리 정책 없음 → 질문(Q01)","A5::REPLICATE-SAME-TIME":"같은 시점 반복 측정 + 정책 있음 → 정리(평균/대표/모두)","A5::REPLICATE-NO-POLICY":"반복 측정인데 처리 정책 없음 → 질문(Q01)","A5::BLQ-NO-POLICY":"BLQ 있는데 처리 방법(M1/M3…) 없음 → 질문(Q01)","A5::LLOQ-MISSING":"BLQ 있는데 LLOQ 값이 없음 → 질문(Q01)","A5::ABSENT":"관측값이 아예 없음 → 진행 불가(INVALID)","A6::SEPARABLE":"투약 행과 관측 행이 시각으로 구분됨 → 자동","A6::SAME-TIME-RESOLVABLE":"같은 시각이지만 투약→관측 순서가 정해짐 → 정리 가능","A6::COVARIATE-CHANGE":"공변량 변경 행(EVID=2) 있음 → 표시","A6::RESET-NEEDED":"구획 초기화 행 필요(휴약 등) → 표시","A6::URINE-INTERVAL":"소변 수집 구간(0~4h 등) → 구간 표시","A6::AMBIGUOUS":"행이 투약인지 관측인지 애매함 → 질문(Q04)","A7::NONE-REQUIRED":"공변량 불필요 → 자동","A7::BASELINE-CLEAN":"기저 공변량 완비 → 자동(첫 값 사용)","A7::BASELINE-IMPUTABLE":"기저 공변량 결측 + 보충 정책 있음 → 정리","A7::TIME-VARYING":"시간에 따라 변하는 공변량 → 시점 맞춰 정리","A7::EXTERNAL-JOIN":"별도 표의 공변량 + 연결키 있음 → 합치기","A7::PEDIATRIC-MATURATION":"소아 성숙(나이) 함수 적용 → 정리","A7::KEY-MISSING":"외부 공변량 표의 연결키가 모호 → 질문(Q13)","A7::POLICY-MISSING":"공변량 결측 처리 방법이 없음 → 질문(Q07)","A8::SINGLE-DRUG":"약 하나, 구획 하나 → 자동","A8::MULTI-CMT-DEFINED":"여러 약/대사체 + 구획 규칙 있음 → 정리","A8::DDI-VICTIM-ONLY":"상호작용에서 영향 받는 약만 → 정리","A8::DDI-VICTIM-PERPETRATOR":"영향 받고+주는 약 둘 다 → 구획 분리","A8::METABOLITE-DEFINED":"모약물+대사체 별도 구획 → 정리","A8::CMT-POLICY-MISSING":"구획 번호 배정 규칙이 없음 → 질문(Q09)","A9::CLEAN":"구조/인코딩 결함 없음 → 자동","A9::DUPLICATE-EXACT":"완전 중복 행 → 중복 제거","A9::UNSORTED":"정렬 안 됨(ID·시간순 아님) → 정렬","A9::COLUMN-SYNONYM":"같은 뜻 열이 여러 개 → 표준 하나 선택","A9::UNIT-CONVERSION":"단위 불일치(mg vs µg) → 표준화","A9::ENCODING-FIX":"문자 인코딩 문제(cp949 등) → UTF-8 변환","A9::PRE-DOSE-SAMPLE":"투약 전 채취(시간<0/'PRE') → 정리","A9::PLANNED-VS-ACTUAL":"예정값·실제값 둘 다 + 선택 정책 → 정리","A9::PROTOCOL-DEVIATION":"프로토콜 위반 기록 있음 → 표시(정책 없으면 Q06)","A9::REANALYSIS-FINAL-DEFINED":"재분석 + 최종본 표시됨 → 정리","A9::REANALYSIS-FINAL-MISSING":"재분석인데 최종본 표시 없음 → 질문(Q15D)","A9::PROTOCOL-DEVIATION-NO-POLICY":"위반 있는데 처리 규칙이 없음 → 질문(Q06)","A9::IRRECONCILABLE":"데이터 무결성 깨짐(해결 불가) → 진행 불가","A10::SDTM-ADaM":"CDISC 표준(SDTM/ADaM) 형식 → 자동 파싱","A10::EDC-STRUCTURED":"임상 EDC 추출본 → 평탄화·표준화","A10::CRO-VENDOR":"CRO 제공 형식(벤더별) → 규격대로 파싱","A10::FLAT-TABULAR":"단순 평면 표(깔끔한 CSV/Excel) → 약간 정리","A10::LEGACY-NM":"기존 NONMEM 데이터셋(이미 포맷됨) → 검증","A10::SEMI-STRUCTURED":"여러 시트/표를 합쳐야 함(투약+관측 시트) → 합치기","A10::NON-TABULAR":"표가 아님(텍스트/PDF/이미지) → 미지원","A10::CORRUPTED":"파일 손상(읽기 불가) → 진행 불가"},"node":{"N0":"출발 관문 — 분석 목적이 분명하고 endpoint 종류가 적혀 있나?","N1":"개체(사람/동물) 번호를 만들 수 있나?","N2":"사건을 시간순으로 줄세울 수 있나?","N3":"투약 기록을 완성할 수 있나?","N4":"관측 기록을 완성할 수 있나? (관측이 없다고 바로 실패는 아님)","N5":"BLQ·결측·MDV를 처리할 수 있나? (ULOQ 초과 포함)","N6":"공변량을 붙일 수 있나?","N7":"남은 애매함이 기준 이하인가? → 자동/정리/격리 판정"},"qcode":{"Q01":"BLQ/LLOQ(검출한계) 처리 방법이 안 정해짐 → 방법(M1/M3 등)·LLOQ 값을 정해달라는 질문","Q02":"시간을 실제/예정/경과 중 무엇으로 쓸지, 기준점이 어딘지 안 정해짐","Q03":"집단 PK에서 '회차(occasion)'를 어떻게 나눌지 안 정해짐","Q04":"행이 투약인지 관측인지, 투약-채혈 연결이 애매함","Q05":"여러 연구를 합칠 때 환자번호 충돌 규칙이 없음","Q06":"프로토콜 위반을 어떻게 처리할지 규칙이 없음","Q07":"결측 공변량을 어떻게 채울지 방법이 없음","Q08":"투약 기록 출처 충돌 또는 복원 정책이 없음","Q09":"약물·대사체에 구획(CMT) 번호를 어떻게 줄지 규칙이 없음","Q10":"단위 사전(분자량 MW 포함)이 불완전함","Q11":"분석 목적·endpoint 종류가 충분히 안 적힘","Q12":"시간 기준을 되살릴 수 없음(추가 자료 필요, 또는 사용 불가 수용)","Q13":"외부 공변량 표의 연결키(merge key)가 모호함","Q14":"반복 투약(ADDL/II)과 실제 투약이 충돌, 우선순위 규칙이 없음","Q15A":"데이터 패키지가 불완전(필수 산출물 누락)","Q15B":"정체불명 legacy 표시열의 의미가 문서화 안 됨","Q15C":"실세계 투약 이력 불확실(환자 진술 기반) 미해결","Q15D":"재분석 결과 중 최종본 판정 문서가 없음","Q15X":"어디에도 안 맞는 정체불명 결함(강한 페널티)"},"kind":{"transform":"변환 — 데이터를 실제로 고치는 작업","detect":"감지 — 문제/패턴이 있는지 찾아냄(고치진 않음)","verify":"검사 — 조건이 맞는지 확인하고 통과/실패 판정","route":"분기 — 막히면 어느 질문/종착으로 보낼지 결정"},"layer":{"L-4->L-5":"가장 바닥 정리 — 글자·인코딩·셀·토큰 정규화(L-5→L-4)","L-3->L-4":"축(A0~A10) 평가 경계 — 잡음 정리 후 갈림길 판단(L-4→L-3)","L-2->L-3":"깔끔한 long 표 만들기 — 시트 합치기·wide→long(L-3→L-2)","L-1->L-2":"NONMEM 핵심 열 부여 — ID/TIME/DV/EVID 등(L-2→L-1)"},"terminal":{"AUTO":"그대로 자동으로 NONMEM-ready 완성","REPAIR":"정해진 정책을 적용해 고치면 ready","QUARANTINE":"데이터는 있으나 결정이 필요 → 사람(스폰서) 답변 대기","UNSUPPORTED":"지금 도구가 다루지 못하는 형식(범위 밖)","INVALID":"핵심 정보가 없어 되살릴 수 없음 → 사용 불가"},"vocab":{"ASSIGN":"값을 채워 넣기","VERIFY":"검사하기","CONVERT":"형식 바꾸기","NORMALIZE":"여러 표기를 하나로 통일","JOIN":"표 합치기(공통 키로)","SPLIT":"한 열/칸을 여러 개로 나누기","PIVOT":"wide↔long 모양 바꾸기","FILTER":"조건에 맞는 행에 표시(삭제 아님)","DETECT":"문제/패턴 찾아내기","PROPAGATE":"값을 옆 행으로 채워 퍼뜨리기","CLASSIFY":"정해진 범주로 분류","EXTRACT":"글 속에서 값 뽑아내기","ROUTE":"막히면 어디로 보낼지 결정","BY":"범위 한정:","WITHIN_ID":"개체(ID) 안에서만","WITHIN_OCCASION":"회차 안에서만","WITHIN_ANALYTE":"분석물질 안에서만","ACROSS_SHEET":"시트 경계를 넘어","ACROSS_FILE":"파일 경계를 넘어","PER_SUBJECT":"개체별로 반복","PER_VISIT":"방문별로 반복","ID":"개체 번호 열","TIME":"시간 열","DV":"관측값 열","MDV":"관측결측 표시 열","EVID":"이벤트 종류 열","AMT":"투여량 열","CMT":"구획 번호 열","RATE":"주입 속도 열","ADDL":"추가 투여 횟수 열","II":"투여 간격 열","BLQ_FLAG":"BLQ 표시 열(정량하한 미만 여부)","LLOQ":"정량하한 값 열(LLOQ)","NA_TOKEN":"결측 토큰(NA/빈칸/999 등)","BLQ_TOKEN":"BLQ 토큰(<LLOQ/ND 등)","TIME_FORMAT":"시간 표기 형식","TIME_ANCHOR":"시간 기준점","TIMEZONE":"시간대","ID_DTYPE":"ID 자료형(문자/숫자 혼재)","ID_LEADING_ZERO":"ID 앞자리 0","MERGED_CELL":"병합 셀","MULTI_LEVEL_HEADER":"다단 헤더","TRAILING_BLANK":"꼬리 빈 행","DUPLICATE_ROW":"완전 중복 행","NATURAL_LANGUAGE_DOSE":"자연어 용량('100mg')","NATURAL_LANGUAGE_TIME":"자연어 시간('30분 후')","FREETEXT_COMMENT":"자유 텍스트 코멘트","EXCEL_FORMULA":"엑셀 수식 잔존","EXCEL_DATE_SERIAL":"엑셀 날짜 일련번호","NON_ASCII_DECIMAL":"비표준 소수점/천단위","LINEBREAK_IN_CELL":"셀 안 줄바꿈","SCIENTIFIC_NOTATION":"과학적 표기(1E+3)","COVARIATE_LAYOUT":"공변량 배치(wide/long)","PRE_DOSE_CODING":"투약 전 시점 코딩","PLACEBO_SUBJECT":"위약군 피험자","ABOVE_ULOQ":"ULOQ 초과 관측","REPLICATE_OBS":"정당한 반복 관측","LEGACY_FLAG_PRESENT":"정체불명 legacy 표시열","RWD_ADHERENCE_UNRESOLVED":"실세계 투약 불확실","DOSE_SHEET":"투약 시트","COVARIATE_SHEET":"공변량 시트","ANALYTE_COLUMN":"분석물질(농도) 열","BASELINE_COVARIATE":"기저 공변량","TIME_VARYING_COVARIATE":"시변 공변량","METABOLITE":"대사체","PARENT_DRUG":"모약물","OCCASION":"투여 회차","REGIMEN_DESCRIPTOR":"투여 요법 설명","ENCODING":"문자 인코딩","FILE_FORMAT":"파일 형식","SHEET_INVENTORY":"시트 목록","BOM":"BOM(바이트순서표시)","LINE_ENDING":"줄바꿈 문자","DELIMITER":"구분자","UNIT_DECLARATION":"단위 표기","UNIT_CONSISTENCY":"단위 일관성","UNIT_CANONICAL":"단위 표준형","MOLAR_MASS":"분자량(MW)","COLUMN_SCHEMA":"열 구조(필수 열 존재·타입)","ROW_ORDERING":"행 정렬 규칙","ROW_LEVEL_INVARIANT":"행 수준 불변조건","CROSS_COLUMN_INVARIANT":"열 간 불변조건"}};
+var EASY={"c0210":{"goal":"내 파일이 8가지 형식 중 무엇인지 알아내고, 컴퓨터가 ‘표로 읽을 수 있는지’ 판정한다.","explain":"정리를 시작하려면 먼저 파일이 표(행·열)로 열리는지부터 확인해야 해요. CDISC 표준인지, CRO가 준 엑셀인지, 아니면 스캔한 PDF처럼 아예 표가 아닌지에 따라 다음 작업이 완전히 달라집니다. 표가 아니거나(NON-TABULAR) 깨졌으면(CORRUPTED) 여기서 정직하게 멈춥니다.","input":"파일 그 자체 — 확장자, 시트 구조, 첫 줄(헤더) 모양","output":"형식 이름 하나 (meta$a10_state) — 예: 'CRO-VENDOR'","axis":"A10","states":[{"code":"SDTM-ADaM","plain":"CDISC 표준(SDTM/ADaM) 형식 → 자동 파싱","route":"go","to":null},{"code":"EDC-STRUCTURED","plain":"임상 EDC 추출본 → 평탄화·표준화","route":"go","to":null},{"code":"CRO-VENDOR","plain":"CRO 제공 형식(벤더별) → 규격대로 파싱","route":"go","to":null},{"code":"FLAT-TABULAR","plain":"단순 평면 표(깔끔한 CSV/Excel) → 약간 정리","route":"go","to":null},{"code":"LEGACY-NM","plain":"기존 NONMEM 데이터셋(이미 포맷됨) → 검증","route":"go","to":null},{"code":"SEMI-STRUCTURED","plain":"여러 시트/표를 합쳐야 함(투약+관측 시트) → 합치기","route":"go","to":null},{"code":"NON-TABULAR","plain":"표가 아님(텍스트/PDF/이미지) → 미지원","route":"stop","to":"UNSUPPORTED"},{"code":"CORRUPTED","plain":"파일 손상(읽기 불가) → 진행 불가","route":"stop","to":"INVALID"}],"pass_to":"next axis","fail_to":"UNSUPPORTED/INVALID","llm_request":"[목표] 내 파일이 8가지 형식 중 무엇인지 알아내고, 컴퓨터가 ‘표로 읽을 수 있는지’ 판정한다.\n[내 데이터] 파일 그 자체 — 확장자, 시트 구조, 첫 줄(헤더) 모양\n[해야 할 일] 문제/패턴 찾아내기 · 파일 형식.\n[분류 보기] 아래 중 정확히 하나로 판정하고, 판별 규칙을 코드에 담아줘 — SDTM-ADaM = CDISC 표준(SDTM/ADaM) 형식; EDC-STRUCTURED = 임상 EDC 추출본; CRO-VENDOR = CRO 제공 형식(벤더별); FLAT-TABULAR = 단순 평면 표(깔끔한 CSV/Excel); LEGACY-NM = 기존 NONMEM 데이터셋(이미 포맷됨); SEMI-STRUCTURED = 여러 시트/표를 합쳐야 함(투약+관측 시트); NON-TABULAR = 표가 아님(텍스트/PDF/이미지); CORRUPTED = 파일 손상(읽기 불가)\n[예시] 입력 « file: study_data.xlsx » → 출력 « a10_state = 'CRO-VENDOR' »\n[결과(출력 계약)] 형식 이름 하나 (meta$a10_state) — 예: 'CRO-VENDOR'; 표로 읽을 수 없으면 왜 안 되는지 사유 문자열도 함께 반환.\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# TODO: 아래 판별 로직(함수)을 직접 구현하세요 — ④의 🤖 요청문을 LLM에 주면 이 함수를 만들어 줍니다.\nmeta$a10_state <- detect_source_format(file_path, meta)"},"c0201":{"goal":"이 데이터가 연구 하나인지, 여러 연구를 합친 것인지 판정한다.","explain":"여러 연구를 합쳐 분석할 때는 환자 번호가 겹치지 않게 통일해야 해요. 그래서 먼저 ‘연구가 몇 개인가’부터 봅니다. 합칠 때 번호 충돌을 풀 규칙이 없으면 사람에게 물어봐야 합니다(Q05).","input":"시트·파일 목록과 연구 식별자(study id)","output":"통합 수준 하나 (meta$a1_state) — SINGLE 또는 MULTI-*","axis":"A1","states":[{"code":"SINGLE","plain":"연구 하나 — 통합 작업 불필요","route":"go","to":null},{"code":"MULTI-HOMO","plain":"같은 설계의 여러 연구 — 합치는 규칙 필요(없으면 Q05)","route":"go","to":null},{"code":"MULTI-HETERO","plain":"설계가 다른 여러 연구 — 합치는 규칙 필요(없으면 Q05)","route":"go","to":null},{"code":"MULTI-SITE","plain":"같은 연구의 여러 기관 — 환자번호 통일 필요(없으면 Q05)","route":"go","to":null},{"code":"INTERIM","plain":"중간분석 시점 데이터 — 누적(pooling) 규칙 필요","route":"go","to":null}],"pass_to":"c0202","fail_to":"Q05","llm_request":"[목표] 이 데이터가 연구 하나인지, 여러 연구를 합친 것인지 판정한다.\n[내 데이터] 시트·파일 목록과 연구 식별자(study id)\n[해야 할 일] 문제/패턴 찾아내기 · 시트 목록 · 범위 한정: · 파일 경계를 넘어.\n[분류 보기] 아래 중 정확히 하나로 판정하고, 판별 규칙을 코드에 담아줘 — SINGLE = 연구 하나 — 통합 작업 불필요; MULTI-HOMO = 같은 설계의 여러 연구 — 합치는 규칙 필요(없으면 Q05); MULTI-HETERO = 설계가 다른 여러 연구 — 합치는 규칙 필요(없으면 Q05); MULTI-SITE = 같은 연구의 여러 기관 — 환자번호 통일 필요(없으면 Q05); INTERIM = 중간분석 시점 데이터 — 누적(pooling) 규칙 필요\n[예시] 입력 « studies: [STUDY_001] » → 출력 « a1_state = 'SINGLE' »\n[결과(출력 계약)] 통합 수준 하나 (meta$a1_state) — SINGLE 또는 MULTI-*; 표로 읽을 수 없으면 왜 안 되는지 사유 문자열도 함께 반환.\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# TODO: 아래 판별 로직(함수)을 직접 구현하세요 — ④의 🤖 요청문을 LLM에 주면 이 함수를 만들어 줍니다.\n# A1 연구 통합 수준 평가\nmeta$a1_state <- if (n_studies == 1) 'SINGLE' else classify_integration(studies)"},"c0203":{"goal":"사건이 ‘언제’ 일어났는지, 시간을 어떻게 쓸지 정한다(실제/예정/경과 등).","explain":"약을 언제 먹고 언제 채혈했는지는 PK 분석의 핵심이에요. 실제 시각이 있는지, 예정 시각만 있는지, 투약 후 경과시간인지에 따라 TIME 열을 만드는 방법이 달라집니다. 해석이 갈리면 사람이 정하고(Q02), 시간이 아예 없으면 되살릴 수 없습니다(INVALID).","input":"시간 관련 열(날짜·시각·nominal time)과 기준점(anchor) 정보","output":"시간 정책 하나 (meta$a3_state) — 예: 'ACTUAL-PREFERRED'","axis":"A3","states":[{"code":"ACTUAL","plain":"실제 측정된 시각(벽시계 시간)","route":"go","to":null},{"code":"NOMINAL-ONLY","plain":"예정된 시각만 있음(실제 기록 없음)","route":"go","to":null},{"code":"ACTUAL-PREFERRED","plain":"둘 다 있고 실제 시각을 사용","route":"go","to":null},{"code":"NOMINAL-PREFERRED","plain":"둘 다 있고 예정 시각을 사용","route":"go","to":null},{"code":"ELAPSED","plain":"투약 이후 경과시간(상대 시간)","route":"go","to":null},{"code":"INTERVAL","plain":"구간으로 기록된 시간(예: 2~4시간)","route":"go","to":null},{"code":"AMBIGUOUS","plain":"시간 해석이 여러 가지로 갈려 애매함 → 사람이 정해야 함(Q02)","route":"ask","to":"Q02"},{"code":"UNRECOVERABLE","plain":"시간 정보가 아예 없어 되살릴 수 없음 → 진행 불가(Q12/INVALID)","route":"stop","to":"INVALID"}],"pass_to":"c0204","fail_to":"Q02","llm_request":"[목표] 사건이 ‘언제’ 일어났는지, 시간을 어떻게 쓸지 정한다(실제/예정/경과 등).\n[내 데이터] 시간 관련 열(날짜·시각·nominal time)과 기준점(anchor) 정보\n[해야 할 일] 문제/패턴 찾아내기 · 시간 표기 형식.\n[분류 보기] 아래 중 정확히 하나로 판정하고, 판별 규칙을 코드에 담아줘 — ACTUAL = 실제 측정된 시각(벽시계 시간); NOMINAL-ONLY = 예정된 시각만 있음(실제 기록 없음); ACTUAL-PREFERRED = 둘 다 있고 실제 시각을 사용; NOMINAL-PREFERRED = 둘 다 있고 예정 시각을 사용; ELAPSED = 투약 이후 경과시간(상대 시간); INTERVAL = 구간으로 기록된 시간(예: 2~4시간); AMBIGUOUS = 시간 해석이 여러 가지로 갈려 애매함; UNRECOVERABLE = 시간 정보가 아예 없어 되살릴 수 없음\n[예시] 입력 « time values: actual datetime + nominal hours » → 출력 « a3_state = 'ACTUAL-PREFERRED' »\n[결과(출력 계약)] 시간 정책 하나 (meta$a3_state) — 예: 'ACTUAL-PREFERRED'; 표로 읽을 수 없으면 왜 안 되는지 사유 문자열도 함께 반환.\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# TODO: 아래 판별 로직(함수)을 직접 구현하세요 — ④의 🤖 요청문을 LLM에 주면 이 함수를 만들어 줍니다.\nmeta$a3_state <- evaluate_time_derivation(df$time_value, meta$time_anchor)"},"c0011":{"goal":"각 행이 ‘측정값 없음(MDV=1)’인지 ‘유효 관측(MDV=0)’인지 표시하는 열을 만든다.","explain":"NONMEM은 어떤 행이 실제 측정이고 어떤 행이 투약·결측인지 MDV 열로 구분해요. 투약·리셋 행(EVID 1~4)은 측정이 아니니 MDV=1, 관측 행(EVID=0)은 값이 있으면 MDV=0, 비어 있으면 MDV=1로 채웁니다. 값을 새로 ‘지어내지’ 않습니다.","input":"EVID 열, 농도값(dv_value) 열","output":"MDV 열(0 또는 1) 추가","axis":null,"states":null,"pass_to":null,"fail_to":null,"llm_request":"[목표] 각 행이 ‘측정값 없음(MDV=1)’인지 ‘유효 관측(MDV=0)’인지 표시하는 열을 만든다.\n[내 데이터] EVID 열, 농도값(dv_value) 열\n[해야 할 일] 값을 채워 넣기 · 관측결측 표시 열.\n[예시] 입력 « EVID,dv_value / 1,. / 0,5.2 / 0,. » → 출력 « EVID,dv_value,**MDV** / 1,.,**1** / 0,5.2,**0** / 0,.,**1** »\n[결과(출력 계약)] MDV 열(0 또는 1) 추가.\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# MDV 부여: dose/reset → MDV=1, obs with valid DV → MDV=0\ndf$MDV <- dplyr::case_when(\n  df$EVID %in% c(1L, 2L, 3L, 4L) ~ 1L,\n  df$EVID == 0L & !is.na(df$dv_value) ~ 0L,\n  df$EVID == 0L &  is.na(df$dv_value) ~ 1L\n)"},"c0120":{"goal":"옆으로 펼쳐진(wide) 농도 표를 NONMEM이 원하는 ‘세로로 긴(long)’ 표로 바꾼다.","explain":"농도가 ‘Time, DRUG_A, DRUG_B …’처럼 분석물질마다 열로 펼쳐져 있으면 NONMEM이 못 읽어요. 한 행에 (시간, 분석물질, 농도) 하나씩 들어가도록 녹여야 합니다. 진단 마법사가 ‘표를 정리하라(WU3 pivot)’고 할 때 하는 작업이에요.","input":"wide 농도 표 — 분석물질(또는 개체)이 열로 펼쳐짐","output":"long 표 — analyte_label·dv_value 열로 녹임(행 수 = 원본 × 분석물질 수)","axis":null,"states":null,"pass_to":null,"fail_to":null,"llm_request":"[목표] 옆으로 펼쳐진(wide) 농도 표를 NONMEM이 원하는 ‘세로로 긴(long)’ 표로 바꾼다.\n[내 데이터] wide 농도 표 — 분석물질(또는 개체)이 열로 펼쳐짐\n[해야 할 일] wide↔long 모양 바꾸기 · 분석물질(농도) 열.\n[예시] 입력 « ID,TIME,DRUG_A,DRUG_B / 1,1,5.2,3.1 / 1,2,4.8,2.9 » → 출력 « ID,TIME,**analyte_label**,**dv_value** / 1,1,**DRUG_A**,**5.2** / 1,1,**DRUG_B**,**3.1** / 1,2,**DRUG_A**,**4.8** / 1,2,**DRUG_B**,**2.9** »\n[결과(출력 계약)] long 표 — analyte_label·dv_value 열로 녹임(행 수 = 원본 × 분석물질 수).\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# 분석물질 wide → long pivot\ndf <- tidyr::pivot_longer(\n  df, cols = pivot_cols,\n  names_to = 'analyte_label', values_to = 'dv_value'\n)"},"c0110":{"goal":"따로 있는 투약 시트를 농도 표(main)에 공통 키로 붙인다.","explain":"투약 기록과 농도 측정이 서로 다른 시트에 있을 때가 많아요. 같은 환자·방문을 가리키는 공통 키(subject_id, visit)로 두 표를 합쳐야 한 줄에 ‘언제 얼마 투약하고 얼마 측정됐는지’가 모입니다. 마법사의 WU4 dose-join이 이 작업입니다.","input":"농도 표(main) + 투약 시트 + 공통 키(c0100에서 식별)","output":"투약 정보(dose_amount, admin_route)가 붙은 통합 표","axis":null,"states":null,"pass_to":null,"fail_to":null,"llm_request":"[목표] 따로 있는 투약 시트를 농도 표(main)에 공통 키로 붙인다.\n[내 데이터] 농도 표(main) + 투약 시트 + 공통 키(c0100에서 식별)\n[해야 할 일] 표 합치기(공통 키로) · 투약 시트 · 범위 한정: · 시트 경계를 넘어.\n[예시] 입력 « main: ID,TIME,DV | dose: SUBJID,AMT,ROUTE » → 출력 « ID,TIME,DV,**dose_amount**,**admin_route** / 1,0,.,**100**,**IV** / 1,1,5.2,**.**,**.** »\n[결과(출력 계약)] 투약 정보(dose_amount, admin_route)가 붙은 통합 표.\n[형식] 위를 수행하는 ‘실행 가능한 R 스크립트’를 dplyr/tidyr로 작성해줘. 각 줄에 한국어 주석을 달고, 없는 값을 새로 지어내지 마(IMPUTE 금지). 도우미 함수가 필요하면 정의까지 포함해줘.","r_skeleton":"# 투약 시트 결합: left join on shared key\ndf <- dplyr::left_join(df, dose_sheet, by = join_key)\nstopifnot(all(!is.na(df$dose_amount[df$event_type == 'dose'])))"}};
 </script>
 <script>
 "use strict";
@@ -4890,6 +4908,20 @@ cy.ready(function(){
   }
   function qChip(q){ return '<span class="pill q codechip" data-tip="'+E(gloss("qcode",q)||q)+'">'+E(q)+'</span>'; }
   function stateChip(ax, s){ return '<span class="pill codechip" data-tip="'+E(gloss("state", ax+"::"+s)||s)+'">'+E(s)+'</span>'; }
+  /* onward 라우팅 해소(모든 노드): 통과=c칩/친절문구 · 막힘=질문(Q) vs ✋정당한 종료 구분 */
+  function isCid(x){ return /^c\d{4}$/.test(String(x||"")); }
+  function isQc(x){ return /^Q\d+[A-Z]?$/.test(String(x||"")); }
+  function passChip(p){
+    if(!p) return '<span class="pill pass">다음 작업으로 계속</span>';
+    if(isCid(p)) return '<span class="pill pass">→</span> '+chip(p,"c");
+    if(String(p)==="next axis") return '<span class="pill pass">다음 축 평가로 계속 → 🏁</span>';
+    return '<span class="pill pass">'+E(p)+'</span>';
+  }
+  function failChip(f){
+    if(!f) return '<span class="pill">없음(이 작업은 막히지 않음)</span>';
+    if(isQc(f)) return qChip(f);
+    return '<span class="termstop" data-tip="자동 처리 대상이 아니라 여기서 정직하게 종료합니다(결함이 아니라 정당한 종료).">✋ 정당한 종료 · '+E(f)+'</span>';
+  }
   function colorNote(){
     return '<div class="colornote">길 색 안내 — <b class="amb">굵은 앰버 실선</b> = 자동으로 흘러가는 <b>기본 경로</b>(사람 손 불필요) · '
          + '<b class="tl">청록 점선</b> = 여기서 문제가 있으면 <b>‘사람이 결정해야 하는 질문(Q)’</b>으로 빠지는 갈림길.</div>';
@@ -4899,6 +4931,7 @@ cy.ready(function(){
   /* ---- (c 패널) 변환/감지/검사/분기 — 쉬운 말 4섹션 ---- */
   window.renderCPanel = function(id){
     var c=CUNITS[id]; if(!c) return window.renderNodePanel(id,"node");
+    if(window.EASY && EASY[id]) return renderEasyCPanel(id, c, EASY[id]);
     var h=colorNote();
     var chk=(c.precondition_checklist_ko||[]).map(function(t,i){
       return '<li><input type="checkbox" class="ckbox" data-i="'+i+'" id="ck'+i+'"><label for="ck'+i+'">'+E(t)+'</label></li>';
@@ -4933,14 +4966,51 @@ cy.ready(function(){
     if(!vv){
       var q=(canQ||[]);
       return '<div class="muted">이 작업은 ‘검사’가 아니라 변환/분기라 검사 장면이 없습니다.</div>'
-        + (q.length ? kv("막히면 갈 수 있는 질문", q.map(qChip).join(" ")) : "");
+        + (q.length ? kv("막히면 갈 수 있는 질문", q.map(qChip).join(" "))
+                    : kv("다음", '<span class="pill pass">정리 후 다음 작업으로 계속 → 🏁</span>'));
     }
     var h=kv("검사 대상 열", (vv.target_columns||[]).map(function(x){return '<span class="pill">'+E(x)+'</span>';}).join(" "));
     h+=kv("합격 기준", E(vv.criterion_predicate_ko));
-    h+=kv("통과하면 →", '<span class="pill pass">'+E(vv.pass_route_to||"다음 작업")+'</span>');
-    h+=kv("막히면(실패) →", vv.fail_route_to ? qChip(vv.fail_route_to) : '<span class="pill">없음</span>');
+    h+=kv("통과하면 →", passChip(vv.pass_route_to));
+    h+=kv("막히면(실패) →", failChip(vv.fail_route_to));
     return h;
   };
+
+  /* ---- (쉬운 카드) 파일럿 c — 🎯목표/🧩설명/보기 행선지/🤖요청문/R 골격 ---- */
+  function renderEasyCPanel(id, c, ez){
+    var h=colorNote();
+    var chk=(c.precondition_checklist_ko||[]).map(function(t,i){
+      return '<li><input type="checkbox" class="ckbox" data-i="'+i+'" id="ck'+i+'"><label for="ck'+i+'">'+E(t)+'</label></li>';
+    }).join("");
+    h+=sect("① 시작 전 — 내 데이터가 이 작업을 받을 준비가 됐는지 확인",
+            '<ul class="chklist" id="chk">'+chk+'</ul><div class="badge-ok" id="chkbadge">✓ 위치 확인됨</div>');
+    var b='<div class="easygoal">🎯 '+E(ez.goal)+'</div>';
+    b+='<div class="easyexp">🧩 '+E(ez.explain)+'</div>';
+    b+=kv("📥 들어오는 것(입력)", E(ez.input));
+    b+=kv("📤 나가는 것(출력)", E(ez.output));
+    b+=kv("작업 종류", E(gloss("kind",c.kind))+" "+chip(c.kind,"kind"));
+    b+=kv("원래 코드", chip(c.c_id,"c")+' · <span class="muted">근거</span> '+E(c.ref));
+    h+=sect("② 이 작업이 무슨 일을 하나 (쉬운 말)", b);
+    if(ez.states){
+      var rows=ez.states.map(function(s){
+        var rt = (s.route==="go") ? '<span class="pill pass">→ 계속</span>'
+               : (s.route==="ask") ? ('→ '+qChip(s.to))
+               : ('<span class="termstop">✋ 정당한 종료 · '+E(s.to)+'</span>');
+        return '<div class="straw">'+stateChip(ez.axis,s.code)+' <span class="muted">'+E(s.plain||"")+'</span> '+rt+'</div>';
+      }).join("");
+      h+=sect("③ 보기 — 내 파일이 어디에 해당하고, 그러면 어디로 가나",
+              rows+'<div style="margin-top:7px">'+kv("통과하면 →", passChip(ez.pass_to))+kv("막히면 →", failChip(ez.fail_to))+'</div>');
+    }else{
+      h+=sect("③ 고치기 전 / 후 — 앰버 칸이 바뀐 부분", renderBeforeAfter(c.before,c.after));
+    }
+    h+=sect("④ 🤖 LLM에게 이대로 복사해 요청하세요 — 이 작업에 맞는 R 스크립트를 만들어 줍니다",
+            '<button class="btn copybtn" data-copy="llmreq_'+E(id)+'">📋 복사</button>'
+            +'<pre class="llmreq" id="llmreq_'+E(id)+'">'+E(ez.llm_request)+'</pre>');
+    h+=sect("⑤ 참고 코드 골격 (위 요청문으로 받은 R을 검증·비교할 때 — 위 R · 아래 Python)",
+            '<div class="snlabel">R</div><pre class="snip">'+hlComments(ez.r_skeleton)+'</pre>'
+            +'<div class="snlabel">Python</div><pre class="snip">'+hlComments(c.python_snippet)+'</pre>');
+    return h;
+  }
 
   /* ---- (Q 패널) 질문(Q-code) — 쉬운 말 ---- */
   window.renderQPanel = function(id){
@@ -5048,6 +5118,25 @@ cy.ready(function(){
     cseq.forEach(function(c){ ((CUNITS[c]||{}).can_route_to_q||[]).forEach(function(q){ qset[q]=1; }); });
     return {faithful:faithful, entry:"N0", c_sequence:cseq, qcodes:Object.keys(qset), honest_stop:!faithful};
   }
+  /* 표가 tidy가 됐다고 가정했을 때의 경로(=궤도 복귀 후 '예상 경로'). wizardVerdict의 faithful 분기와 동일 규칙. */
+  function projectedFaithfulSeq(a){
+    var chosen={};
+    WIZARD.file_property_c.forEach(function(c){ chosen[c]=1; });
+    WIZARD.data_dependent_c.forEach(function(c){
+      var req=WIZARD.precond[c];
+      var ok=(req==="none")||(req==="time")||(req==="dv")||(req==="subject+time+dv" && !!a.has_subject);
+      if(ok) chosen[c]=1;
+    });
+    return WIZARD.canon_order.filter(function(c){ return chosen[c]; });
+  }
+  /* 출발점 N0 → c들 → 🏁 nonmem-ready 까지의 경로를 한 줄로. dotted=true 면 '예상 경로'(점선). */
+  function pathBreadcrumb(seq, dotted){
+    var arrow=dotted?' <span class="parrow d">⇢</span> ':' <span class="parrow">→</span> ';
+    var parts=['<span class="pnode start">N0</span>'];
+    (seq||[]).forEach(function(c){ parts.push('<span class="cchip" data-node="'+E(c)+'">'+E(c)+'</span>'); });
+    parts.push('<span class="pnode goal">🏁 nonmem-ready</span>');
+    return '<div class="breadcrumb'+(dotted?' dotted':'')+'">'+parts.join(arrow)+'</div>';
+  }
   function buildWizard(){
     var mask=document.createElement("div"); mask.id="wizMask";
     var qhtml=WQ.map(function(w){
@@ -5090,8 +5179,9 @@ cy.ready(function(){
     var html="";
     if(v.faithful){
       var qhtml=v.qcodes.length? v.qcodes.map(qChip).join(" ") : '<span class="muted">없음(축이 깨끗하면 질문 없이 통과)</span>';
-      html+='<div class="rescard ok"><h4>✅ 시작 지점: <b>N0</b> — 모든 파일이 여기서 출발합니다</h4>'
-        +'당신 파일은 <b>깔끔한 tidy 표</b>라, 도구가 자동 정리 밴드로 들어갑니다. 트리에서 켜진 길을 따라가 보세요.'
+      html+='<div class="rescard ok"><h4>✅ 시작 지점: <b>N0</b> → 따라가면 <b>🏁 nonmem-ready</b></h4>'
+        +'당신 파일은 <b>깔끔한 tidy 표</b>라 도구가 자동 정리 밴드로 들어갑니다. 아래 길을 끝까지 따라가면 완성에 도달합니다.'
+        + pathBreadcrumb(v.c_sequence, false)
         +'<div style="margin-top:8px"><b>이 파일에 적용되는 정리·검사 작업</b> (클릭하면 설명):<br>'+cSeqChips(v.c_sequence)+'</div>'
         +'<div style="margin-top:8px"><b>정리하면서 마주칠 수 있는 결정 질문(Q)</b>:<br>'+qhtml+'</div>'
         +'<div style="margin-top:8px" class="muted">파일만으로 풀리는 축: <b>A1 / A3 / A5 / A10</b>. 나머지(A0 / A2 / A4 / A6 / A7 / A8 / A9)는 '
@@ -5104,11 +5194,13 @@ cy.ready(function(){
       if(a.bw_sheet || a.qa || a.param || a.subject_wide){ wus.push("WU4 dose-bw-join(체중/용량 시트 결합)"); }
       if(!a.qa && !a.param && !a.subject_wide){ reasons.push("알 수 없는 구조(tidy로 못 읽음)"); }
       var uniq=wus.filter(function(x,i){ return wus.indexOf(x)===i; });
-      html+='<div class="rescard stop"><h4>⛔ 여기서 막힙니다 — ‘구조 인식’ 단계 (GAP-37)</h4>'
-        +'당신 파일은 아직 도구가 자동으로 다루는 <b>깔끔한 tidy 표</b>가 아닙니다. 먼저 표 모양을 정리해야 합니다.'
+      var proj=projectedFaithfulSeq(a);
+      html+='<div class="rescard onramp"><h4>🛟 궤도 복귀 경로 — 막다른 길이 아닙니다</h4>'
+        +'당신 파일은 아직 도구가 자동으로 다루는 <b>깔끔한 tidy 표</b>가 아닙니다. 하지만 dead-end가 아니라, 아래 <b>2단계</b>로 궤도에 올리면 <b>🏁 nonmem-ready</b>까지 갈 수 있어요.'
         +'<div style="margin-top:8px"><b>감지된 이유</b>: '+(reasons.length?reasons.map(E).join(" / "):"—")+'</div>'
-        +'<div style="margin-top:8px"><b>먼저 할 일(recipe)</b>:<br>'+(uniq.length?uniq.map(E).join("<br>"):"—")+'</div>'
-        +'<div style="margin-top:8px">지금 도구가 자동 진단하는 작업: '+cSeqChips(v.c_sequence)+' <span class="muted">(파일 속성만)</span></div>'
+        +'<div class="step"><b>1단계 — 표 정리(on-ramp)</b> <span class="manual">⚠️ 이 정리는 아직 도구가 자동으로 못 함 — 당신/LLM이 먼저 (GAP-37)</span><br>'+(uniq.length?uniq.map(E).join("<br>"):"—")+'</div>'
+        +'<div class="step"><b>2단계 — 표가 tidy가 되면 이어지는 자동 경로</b> <span class="muted">(아래는 <b>예상 경로</b> · 점선)</span>'+pathBreadcrumb(proj, true)+'</div>'
+        +'<div style="margin-top:8px">지금 도구가 자동으로 진단하는 작업: '+cSeqChips(v.c_sequence)+' <span class="muted">(파일 속성만 — 1단계 정리 전이라 여기까지)</span></div>'
         +'<div style="margin-top:8px" class="muted">✅ 정확한 자동 진단은 정본 Python 어댑터로: <span class="mono">python -m src.adapter &lt;내파일.xlsx&gt; --recipe</span></div></div>';
     }
     box.innerHTML=html;
@@ -5118,7 +5210,7 @@ cy.ready(function(){
         if(n && n.length){ closeWiz(); onNodeTap(n); }
       });
     });
-    var ids=["N0"].concat(v.c_sequence).concat(v.qcodes);
+    var ids=["N0"].concat(v.c_sequence).concat(v.qcodes||[]).concat(["AUTO"]);
     highlightSet(ids);
   }
   function highlightSet(ids){
@@ -5209,6 +5301,16 @@ cy.ready(function(){
   redrawLegend();
   var wb=document.getElementById("wizardBtn"); if(wb) wb.addEventListener("click", openWiz);
   var gb=document.getElementById("glossBtn"); if(gb) gb.addEventListener("click", function(){ document.getElementById("glossMask").classList.add("on"); });
+  /* 🤖 요청문 복사 버튼(이벤트 위임 — 패널은 매번 새로 그려지므로) */
+  document.addEventListener("click", function(e){
+    var btn=(e.target && e.target.closest) ? e.target.closest(".copybtn") : null;
+    if(!btn) return;
+    var el=document.getElementById(btn.getAttribute("data-copy")); if(!el) return;
+    var txt=el.innerText||el.textContent||"";
+    function flash(){ var t=btn.getAttribute("data-lbl"); if(!t){ t=btn.textContent; btn.setAttribute("data-lbl",t); } btn.textContent="✓ 복사됨"; setTimeout(function(){ btn.textContent=t; },1200); }
+    if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(flash, flash); }
+    else { try{ var r=document.createRange(); r.selectNodeContents(el); var sel=window.getSelection(); sel.removeAllRanges(); sel.addRange(r); document.execCommand("copy"); }catch(_){ } flash(); }
+  });
   if(state && state.selected){
     var sn=cy.getElementById(state.selected);
     if(sn && sn.length){ try{ onNodeTap(sn); }catch(e){} }
