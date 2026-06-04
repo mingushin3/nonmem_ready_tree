@@ -224,12 +224,16 @@ def test_v2_does_not_touch_index_html():
     assert "내 파일 진단" in html
 
 
-# ===== (6) 쉬운 LLM 지시문 + R 골격(EASY) — 파일럿 6개 =====================
+# ===== (6) 쉬운 LLM 지시문 + R 골격(EASY) — 전체 c 확대 =====================
 #   정본 c_units.json 파생(무수정). goal/explain/input/output 만 큐레이트.
 
-def test_easy_pilot_set_and_fields():
-    assert list(V.EASY) == ["c0210", "c0201", "c0203", "c0011", "c0120", "c0110"]
+_PILOT6 = {"c0210", "c0201", "c0203", "c0011", "c0120", "c0110"}
+
+
+def test_easy_cards_wellformed_and_pilot_present():
+    assert _PILOT6 <= set(V.EASY), "파일럿 6개는 항상 포함"
     for cid, ez in V.EASY.items():
+        assert cid in V._RAW, cid                      # 정본 c_id 만(날조 c 0)
         for k in ("goal", "explain", "input", "output", "llm_request", "r_skeleton"):
             assert ez.get(k), (cid, k)
         # 🤖 요청문은 실행가능 R 산출 유도 + IMPUTE 금지(silent-error 차단) 명시
@@ -308,3 +312,78 @@ def test_easy_does_not_mutate_spec_cunits():
     assert raw["c0210"]["llm_prompt"].startswith("A10 Source Format Parseability를 평가하라")
     # 쉬운 카드의 goal 은 원문 llm_prompt 와 다른(=쉬운) 텍스트
     assert V.EASY["c0210"]["goal"] != raw["c0210"]["llm_prompt"]
+
+
+# ===== (6b) 전체 122 확대 — 커버리지·전 축 routing·쉬운말·attach 가이드 ========
+
+def test_easy_covers_all_122_cunits():
+    """EASY 는 정본 122 c 전부를 덮고, 정본에 없는 c 는 만들지 않는다."""
+    allc = {e["c_id"] for e in V._RAW.values()}
+    assert set(V.EASY) == allc
+    assert len(V.EASY) == 122
+
+
+def test_every_axis_c_routes_from_canonical_arrows():
+    """축 평가 c(11개, A0~A10) 보기 행선지는 전부 정본 llm_prompt 화살표와 일치(날조 0)."""
+    import re
+    axis_c = [cid for cid, ez in V.EASY.items() if ez["states"]]
+    assert len(axis_c) == 11, axis_c               # A0~A10 = c0200..c0210
+    for cid in axis_c:
+        arrows = dict(re.findall(r"([A-Z][A-Z0-9\-]+)\s*→\s*(UNSUPPORTED|INVALID|Q\d+[A-Z]?)",
+                                 V._RAW[cid].get("llm_prompt", "")))
+        for s in V.EASY[cid]["states"]:
+            assert arrows.get(s["code"]) == s["to"], (cid, s["code"], arrows.get(s["code"]), s["to"])
+            # 'stop'=정당한 종료(터미널) / 'ask'=질문(Q) 구분 정확
+            if s["to"]:
+                assert s["route"] == ("ask" if s["to"].startswith("Q") else "stop"), (cid, s)
+
+
+# 대학1학년 비친숙 용어 → 같은 카드 안에 '쉬운 풀이 신호'가 함께 있어야 함(괄호/한국어 풀이 어느 쪽이든).
+_JARGON = {
+    "파싱": ["읽", "해석"], "인코딩": ["글자", "UTF"], "토큰": ["표기"], "anchor": ["기준"],
+    "피벗": ["세로", "모양", "가로"], "PIVOT": ["세로", "모양", "가로"],
+    "조인": ["합", "공통"], "JOIN": ["합", "공통"],
+    "BLQ": ["하한", "낮아", "미만"], "LLOQ": ["하한"], "ULOQ": ["상한"], "tidy": ["한 줄", "깔끔"],
+    "forward-fill": ["채우"], "LOCF": ["이어", "유지"], "bolus": ["한번"], "molar": ["분자", "몰"],
+}
+
+
+def test_easy_no_unglossed_jargon():
+    """전문어가 쓰이면 같은 카드에서 한 번은 쉬운 말로 풀려 있어야 한다(대학1학년 가독)."""
+    bad = []
+    for cid, ez in V.EASY.items():
+        txt = " ".join([ez["goal"], ez["explain"], ez["input"], ez["output"]])
+        for term, sig in _JARGON.items():
+            if term in txt and not any(s in txt for s in sig):
+                bad.append((cid, term))
+    assert not bad, bad
+
+
+def test_attach_guide_in_wizard():
+    """'내 파일 진단'에 골격 attach→nonmem-ready 가이드가 정직하게(수작업·GAP-37 명시) 표시."""
+    html = V.build_html()
+    assert "function attachGuide" in html
+    assert "이 진단은 어떻게" in html
+    assert "골격에 ‘붙기(attach)’" in html
+    assert "당신이나 LLM이 먼저 합니다(GAP-37)" in html   # 없는 자동화를 그리지 않음(정직)
+    for n in ("N0", "N7"):
+        assert n in html
+
+
+def test_all_122_easy_cards_reachable():
+    """모든 EASY c 는 CUNITS(배선 57) 또는 CUNITS_EXTRA(비배선 65)에 있어 패널 렌더 가능."""
+    wired, extra = set(V.B.CUNITS), set(V.CUNITS_EXTRA)
+    assert set(V.EASY) <= (wired | extra)                 # 122 전부 도달 가능
+    assert not (wired & extra)                            # 중복 0
+    assert len(wired | extra) >= 122
+    for cid, c in V.CUNITS_EXTRA.items():                 # 쉬운 카드 렌더 필수 필드
+        for k in ("c_name_ko", "kind", "python_snippet", "can_route_to_q", "layer_pair"):
+            assert k in c, (cid, k)
+
+
+def test_card_list_browser_present():
+    """그래프 배선과 무관히 122개를 열람하는 '작업 카드' 목록 모달 존재."""
+    html = V.build_html()
+    assert "function buildCardList" in html
+    assert "작업 카드 122" in html                          # 토프바 버튼
+    assert "var CUNITS_EXTRA=" in html                     # 비배선 c 데이터 주입

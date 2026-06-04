@@ -452,6 +452,797 @@ _EASY_SEED = {
         "input": "농도 표(main) + 투약 시트 + 공통 키(c0100에서 식별)",
         "output": "투약 정보(dose_amount, admin_route)가 붙은 통합 표",
     },
+    # ── Batch 0 (대표: verify-축 · route · detect-token · transform-normalize) ──
+    "c0200": {
+        "goal": "이 데이터로 ‘무엇을 분석할지’(분석 목적)가 분명히 적혀 있는지 확인한다.",
+        "explain": "PK(약동학=약이 몸에서 변하는 과정) 정리는 ‘약 농도를 분석할지, 노출-반응을 볼지’ 목적이 "
+                   "정해져야 시작해요. 목적·endpoint(분석 대상으로 삼는 측정값) 종류가 안 적혀 있으면(AIC-MISSING) "
+                   "사람이 정해 줘야 합니다(질문 Q11).",
+        "input": "데이터 설명(메타데이터=데이터에 대한 정보)과 분석 계획서",
+        "output": "분석 의도 상태 하나 (meta$a0_state) — 예: 'AIC-PK'",
+    },
+    "c0204": {
+        "goal": "투약(약을 준 기록) 정보가 빠짐없이, 충돌 없이 적혀 있는지 판정한다.",
+        "explain": "약을 언제 얼마나 줬는지가 완전해야 PK를 계산해요. 체중당 용량인지, 반복 투여를 압축(ADDL=추가 "
+                   "투여 횟수·II=투여 간격)했는지, 정맥주입을 중간에 멈췄다 다시 켰는지에 따라 처리가 달라집니다. "
+                   "투약 기록·복원 규칙이 없으면 질문(Q08), 반복 투여가 실제와 충돌하면 Q14, 주입 중단/재개 정책이 "
+                   "없으면 Q04, 핵심 정보가 없으면 되살리기 불가(INVALID).",
+        "input": "투약 관련 열과 투여 요법(regimen=투약 방법) 정보",
+        "output": "투약 완전성 상태 하나 (meta$a4_state) — 예: 'COMPLETE'",
+    },
+    "c0250": {
+        "goal": "분석 목적이 비어 있을 때(AIC-MISSING) 사람에게 묻는 질문 Q11로 보낸다.",
+        "explain": "갈림길을 정하는 작업이에요(데이터를 고치지 않음). A0(분석 목적) 평가가 ‘목적 없음’으로 나오면 "
+                   "사람이 목적을 정해 줘야 하므로 질문 Q11로 ‘라우팅(routing=어디로 보낼지 결정)’합니다.",
+        "input": "A0 평가 결과(meta$a0_state)",
+        "output": "보낼 곳 결정 — AIC-MISSING이면 질문 Q11",
+    },
+    "c0042": {
+        "goal": "데이터셋 전체 규칙(불변 조건) 위반을 원인별로 알맞은 질문(Q)으로 보낸다.",
+        "explain": "검사(c0041)에서 찾은 위반을 원인에 따라 나눠 보내요(고치지 않음). 투약량(AMT) 문제→Q08, "
+                   "구획 번호(CMT=약이 들어가는 칸 번호) 문제→Q09, 정량 하한(BLQ=측정 한계 미만) 문제→Q01, "
+                   "행이 투약인지 관측인지 모호→Q04.",
+        "input": "c0041이 찾은 데이터셋 위반 목록",
+        "output": "보낼 질문(Q) 결정 (Q01/Q04/Q08/Q09) 또는 되살리기 불가(INVALID)",
+    },
+    "c0300": {
+        "goal": "‘값 없음’을 뜻하는 여러 표기(토큰=표기, 예: NA·빈칸·999·점)가 어디에 있는지 찾아낸다.",
+        "explain": "같은 ‘값 없음’도 NA, N/A, 999, ‘.’, 빈칸처럼 제각각 적혀 있어요. 먼저 어떤 표기가 어느 열에 "
+                   "있는지 ‘목록’만 만듭니다(고치는 건 다음 단계 c0301 정규화=여러 표기를 하나로 통일).",
+        "input": "원본 표(데이터프레임)",
+        "output": "발견된 결측 표기 목록 (meta['na_variants_found'])",
+    },
+    "c0301": {
+        "goal": "c0300이 찾은 여러 ‘값 없음’ 표기를 하나의 표준 빈값(NaN)으로 통일한다.",
+        "explain": "NA·N/A·999·‘.’ 처럼 흩어진 ‘값 없음’ 표기를 전부 한 가지 표준값(NaN=비어 있음)으로 바꿔, "
+                   "컴퓨터가 일관되게 ‘결측’으로 다루게 합니다(정규화). 다른 표기가 0개 남아야 하고, 진짜 값을 새로 "
+                   "지어내지 않습니다.",
+        "input": "c0300이 만든 결측 표기 목록",
+        "output": "모든 ‘값 없음’ 표기 → NaN(표준 빈값)으로 통일",
+    },
+    # ── DETECT 나머지 (감지/분류; 대부분 '찾기만 하고 고치진 않음') ──────────────
+    "c0130": {
+        "goal": "농도 열이 어떤 종류의 측정물질인지 분류한다(단일 약·모약물+대사체·약물상호작용 등).",
+        "explain": "한 약만 잰 건지, 모약물과 그 대사체(몸에서 약이 변해 생긴 물질)를 같이 잰 건지, 약물상호작용"
+                   "(DDI) 짝인지에 따라 뒤에서 구획 번호(CMT=약이 들어가는 칸 번호) 배정이 달라져서 먼저 분류해요.",
+        "input": "분석물질(농도) 관련 열들, A8 축 상태",
+        "output": "분석물질 유형 (meta['analyte_type']) — single/multi/metabolite/ddi",
+    },
+    "c0131": {
+        "goal": "대사체가 있으면 모약물과 대사체의 관계를 분류하고 구획 번호 매핑을 정한다.",
+        "explain": "대사체(몸에서 약이 변해 생긴 물질)가 있으면 어느 열이 모약물이고 어느 게 대사체인지 짝지어야 "
+                   "구획 번호(CMT)를 제대로 줄 수 있어요.",
+        "input": "분석물질 열 이름, 화합물 정보",
+        "output": "모약물↔대사체 관계 지도 (meta['parent_metabolite_map'])",
+    },
+    "c0150": {
+        "goal": "각 행이 투약인지·관측인지·공변량 변경인지·리셋인지 분류한다.",
+        "explain": "한 줄 한 줄이 ‘약을 준 기록(투약)’인지 ‘피를 뽑아 잰 기록(관측)’인지 등을 구분해야 NONMEM이 "
+                   "사건을 이해해요. 구분이 안 되면 사람에게 묻는 질문(Q04).",
+        "input": "원본 사건 정보가 든 표",
+        "output": "+event_type 열 (dose=투약/obs=관측/cov_change=공변량변경/reset=리셋)",
+    },
+    "c0202": {
+        "goal": "이 연구가 어떤 설계인지 분류한다(평행군·교차·생동성·전임상 등).",
+        "explain": "연구 설계에 따라 데이터 구조가 달라요. 평행군(군마다 다른 처치), 교차(한 사람이 여러 처치), "
+                   "생동성(대조약 비교), 전임상(동물) 등 10가지 중 하나로 정합니다.",
+        "input": "연구 계획서 정보, 투약 패턴",
+        "output": "연구 설계 상태 하나 (meta$a2_state) — 예: 'SAD-MAD'",
+    },
+    "c0205": {
+        "goal": "관측값 상태와 정량 한계(BLQ) 처리 상황을 15가지 중 하나로 판정한다.",
+        "explain": "농도가 깨끗한지, 정량 하한 미만(BLQ=너무 낮아 정확히 못 잼)이 있는지, 정량 상한 초과(ULOQ)·"
+                   "반복 측정이 있는지 봅니다. BLQ인데 처리 방법(M1/M3 등)이 없으면 질문(Q01), 관측값이 아예 없으면 "
+                   "되살리기 불가(INVALID).",
+        "input": "관측(농도) 열, BLQ 표시",
+        "output": "관측/BLQ 상태 하나 (meta$a5_state) — 예: 'BLQ-TEXT'",
+    },
+    "c0206": {
+        "goal": "투약 행과 관측 행을 분명히 나눌 수 있는지 판정한다.",
+        "explain": "같은 시각에 투약과 관측이 겹칠 때 순서를 정할 수 있는지, 공변량 변경·리셋 행이 있는지 봅니다. "
+                   "투약인지 관측인지 모호하면 질문(Q04).",
+        "input": "사건 행들(시간/투약/관측 구조)",
+        "output": "행 분류 상태 하나 (meta$a6_state) — 예: 'SAME-TIME-RESOLVABLE'",
+    },
+    "c0207": {
+        "goal": "필요한 공변량(나이·체중 등 설명 변수)이 있고 데이터에 붙일 수 있는지 판정한다.",
+        "explain": "공변량(분석에 쓰는 부가 정보: 체중·나이·신장기능 등)이 필요 없는지, 기저값이 깨끗한지, 시간에 "
+                   "따라 변하는지, 외부 표에서 붙여야 하는지 봅니다. 연결 키(공통 열)가 없으면 Q13, 결측 채우는 방법이 "
+                   "없으면 Q07.",
+        "input": "공변량 가용성, 분석 요구사항",
+        "output": "공변량 부착 상태 하나 (meta$a7_state) — 예: 'BASELINE-CLEAN'",
+    },
+    "c0208": {
+        "goal": "약/대사체가 몇 개이고 구획 번호(CMT)를 어떻게 줄지 판정한다.",
+        "explain": "약이 하나인지, 여러 약/대사체인지, 약물상호작용 짝인지에 따라 ‘구획 번호(CMT=약이 들어가는 칸 "
+                   "번호)’를 어떻게 매길지 정해요. 배정 규칙이 없으면 질문(Q09).",
+        "input": "분석물질 열, 약물/투여경로 정보",
+        "output": "다약물/구획 상태 하나 (meta$a8_state) — 예: 'SINGLE-DRUG'",
+    },
+    "c0211": {
+        "goal": "정량 상한(ULOQ=너무 높아 정확히 못 잼)을 넘는 관측값이 있는지 찾아낸다.",
+        "explain": "농도가 측정기 상한을 넘으면(>ULOQ) 그대로 쓰면 안 돼요. 그런 값이 있는지 찾습니다. 처리 정책이 "
+                   "없으면 질문(Q01).",
+        "input": "관측값, ULOQ 기준값",
+        "output": "ULOQ 초과 여부 (meta['has_above_uloq'])와 해당 행 표시",
+    },
+    "c0212": {
+        "goal": "같은 개체·같은 시각에 정당한 반복 측정(값이 2개 이상)이 있는지 찾아낸다.",
+        "explain": "같은 (개체,시간)에서 농도를 두 번 이상 잰 ‘정당한 반복’을 찾습니다(모든 칸이 똑같은 ‘완전 중복’과는 "
+                   "다름). 처리 정책이 없으면 질문(Q01).",
+        "input": "개체·시간·농도가 있는 관측 행",
+        "output": "반복 측정 여부 (meta['has_replicates'])와 반복 묶음 표시",
+    },
+    "c0215": {
+        "goal": "완전히 똑같은 행(완전 중복)이 있는지 찾아낸다(A9 평가 보조).",
+        "explain": "모든 칸이 똑같은 행이 있는지 봅니다. 같은 시각 다른 값인 ‘반복 측정’과는 다릅니다.",
+        "input": "전체 표",
+        "output": "완전 중복 존재 여부 (meta['has_exact_duplicates'])",
+    },
+    "c0216": {
+        "goal": "글자 깨짐 같은 인코딩(글자 저장 방식) 문제가 남아 있는지 찾아낸다.",
+        "explain": "한글이 깨지는 인코딩(글자를 컴퓨터에 저장하는 방식, 예: cp949) 문제가 바닥 정리 뒤에도 남았는지 "
+                   "확인합니다(A9 평가 보조).",
+        "input": "문자 열, 인코딩 정보",
+        "output": "인코딩 문제 여부 (meta['has_encoding_issues'])",
+    },
+    "c0305": {
+        "goal": "정량 하한 미만 표기(BLQ; <LLOQ·ND·<0.1 등)가 있는지 찾아낸다.",
+        "explain": "‘<0.1’, ‘BLQ’, ‘ND(검출 안 됨)’ 같은 표기가 농도 칸에 있는지 찾고, 숫자로 된 정량 하한(LLOQ) 값도 "
+                   "보존하는지 확인합니다(고치는 건 c0306).",
+        "input": "관측(농도) 열",
+        "output": "발견된 BLQ 표기 목록과 LLOQ 값 (meta['blq_variants_found'])",
+    },
+    "c0310": {
+        "goal": "시간 값이 어떤 형식인지 찾아낸다(시:분, 경과시간, 소수, 날짜시각 등).",
+        "explain": "‘1:30’ 같은 시계 표기인지, ‘1.5’ 같은 경과시간인지, 날짜+시각인지에 따라 나중에 숫자로 바꾸는 "
+                   "방법이 달라져서 먼저 형식만 알아냅니다.",
+        "input": "시간 열",
+        "output": "감지된 시간 형식 (meta['time_format_detected'])",
+    },
+    "c0312": {
+        "goal": "시간대(타임존)가 섞였는지 찾아낸다(서머타임·12시간 vs 24시간 등).",
+        "explain": "측정 시각이 서로 다른 시간대(KST·JST 등)나 12/24시간 표기로 섞이면 시간 계산이 틀려요. 그런 "
+                   "불일치가 있는지 찾습니다.",
+        "input": "시간 열",
+        "output": "시간대 문제 (meta['tz_issues'])",
+    },
+    "c0314": {
+        "goal": "시간 기준점(anchor=시간을 재는 출발점) 표기가 섞였는지 찾아낸다(Day 1·Visit 1·날짜 혼재).",
+        "explain": "‘Day 1’, ‘Visit 1’, ‘2024-01-15’처럼 기준점(언제를 0으로 볼지)이 섞이면 시간을 못 맞춰요. 그런 "
+                   "혼재를 찾습니다.",
+        "input": "시간 기준점 열",
+        "output": "기준점 유형 (meta['time_anchor_type'])",
+    },
+    "c0320": {
+        "goal": "개체 번호(ID) 값의 자료형(문자/숫자)이 섞였는지 찾아낸다.",
+        "explain": "ID가 어떤 행은 숫자 1, 어떤 행은 글자 ‘002’처럼 섞이면 같은 개체를 다르게 볼 수 있어요. 그런 "
+                   "혼재를 찾습니다.",
+        "input": "ID 열",
+        "output": "ID 자료형 혼재 여부 (meta['id_dtype_mixed'])",
+    },
+    "c0322": {
+        "goal": "개체 번호(ID)에 앞자리 0(‘001’ 등)이 있는지 찾아낸다.",
+        "explain": "‘001’처럼 앞에 0이 붙은 ID는 숫자로 바꾸면 0이 사라져 1과 헷갈릴 수 있어요. 그런 ID가 있는지 찾습니다.",
+        "input": "ID 열",
+        "output": "앞자리 0 존재 여부 (meta['has_leading_zero'])",
+    },
+    "c0330": {
+        "goal": "각 열의 단위(mg/mL 등) 표기가 빠졌거나 섞였는지 찾아낸다.",
+        "explain": "농도·체중 같은 값은 단위가 분명해야 해요. 단위가 안 적혔거나, 몰농도(molar=분자 개수 기준)와 "
+                   "질량(mass=무게 기준)이 섞였는지 찾습니다.",
+        "input": "열 정보(헤더 등)",
+        "output": "열별 단위 상태 (meta['unit_status'])",
+    },
+    "c0332": {
+        "goal": "몰농도↔질량 변환에 필요한 분자량(MW) 사전이 있는지 확인한다.",
+        "explain": "몰농도(분자 개수 기준)와 질량(무게 기준)을 서로 바꾸려면 분자량(MW)이 필요해요. MW가 없으면 변환 "
+                   "불가라 질문(Q10).",
+        "input": "단위 정보",
+        "output": "분자량 사전 가용 여부 (meta['mw_available'])",
+    },
+    "c0340": {
+        "goal": "엑셀 병합 셀(여러 칸을 하나로 합쳐 아래가 빈칸처럼 보이는 것)이 있는지 찾아낸다.",
+        "explain": "엑셀에서 셀을 병합하면 첫 칸만 값이 있고 아래는 빈칸이 돼요. 그대로 읽으면 값이 비어 보여서, "
+                   "병합이 있는지 먼저 찾습니다(채우는 건 c0341).",
+        "input": "표(데이터프레임)",
+        "output": "병합 셀 존재 여부 (meta['has_merged_cells'])",
+    },
+    "c0342": {
+        "goal": "머리글(헤더=표 맨 위 제목줄)이 두 줄 이상인 다단 헤더인지 찾아낸다.",
+        "explain": "제목줄이 두 층(예: 위는 ‘PK/공변량’, 아래는 ‘ID/TIME/DV’)이면 컴퓨터가 헷갈려요. 그런 다단 "
+                   "헤더를 찾습니다(한 줄로 펴기=c0343).",
+        "input": "원본 파일의 머리글 행들",
+        "output": "다단 헤더 여부 (meta['has_multi_header'])",
+    },
+    "c0344": {
+        "goal": "표 끝에 붙은 빈 행(꼬리 빈 행)이 몇 개인지 찾아낸다.",
+        "explain": "데이터 아래에 빈 행이 따라붙는 경우가 많아요. 잘못 세면 행 수가 틀리니, 끝의 빈 행 개수를 셉니다"
+                   "(제거는 c0345).",
+        "input": "표",
+        "output": "꼬리 빈 행 개수 (meta['n_trailing_blank'])",
+    },
+    "c0346": {
+        "goal": "완전히 똑같은 행(완전 중복)이 몇 개인지 찾아낸다.",
+        "explain": "모든 칸이 동일한 행이 몇 번 나오는지 셉니다. 같은 시각 다른 값인 ‘반복 측정’과는 다릅니다"
+                   "(표시는 c0347).",
+        "input": "표",
+        "output": "완전 중복 개수 (meta['n_exact_duplicates'])",
+    },
+    "c0350": {
+        "goal": "사람 말로 적힌 투여량(‘100 mg’, ‘two tablets’)이 있는지 찾아낸다.",
+        "explain": "투여량이 숫자가 아니라 ‘100 mg’, ‘알약 2개’처럼 말로 적히면 계산을 못 해요. 그런 표현이 있는지 "
+                   "찾습니다(숫자로 뽑는 건 c0351).",
+        "input": "투여량 열",
+        "output": "자연어 투여량 존재 여부 (meta['has_nl_dose'])",
+    },
+    "c0352": {
+        "goal": "사람 말로 적힌 시간(‘predose’, ‘after 30 min’)이 있는지 찾아낸다.",
+        "explain": "시간이 ‘투약 전’, ‘30분 후’처럼 말로 적히면 숫자로 못 써요. 그런 표현을 찾습니다(숫자로 뽑는 건 "
+                   "c0353).",
+        "input": "시간 열",
+        "output": "자연어 시간 존재 여부 (meta['has_nl_time'])",
+    },
+    "c0354": {
+        "goal": "자유롭게 쓴 메모(코멘트) 열이 있는지 찾아낸다.",
+        "explain": "‘특이사항’ 같은 긴 자유 텍스트 열은 분석값과 섞이면 안 돼요. 그런 메모 열을 찾습니다(분리는 c0355).",
+        "input": "표",
+        "output": "자유 텍스트 열 목록 (meta['freetext_cols'])",
+    },
+    "c0360": {
+        "goal": "파일의 인코딩(글자 저장 방식: UTF-8·CP949 등)을 알아낸다.",
+        "explain": "한글 파일은 저장 방식(인코딩)이 여러 가지라, 맞는 방식으로 안 읽으면 글자가 깨져요. 어떤 "
+                   "인코딩인지 먼저 알아냅니다(UTF-8로 바꾸기=c0361).",
+        "input": "원본 파일 바이트",
+        "output": "감지된 인코딩 (meta['detected_encoding'])",
+    },
+    "c0362": {
+        "goal": "파일 맨 앞의 보이지 않는 표식(BOM=Byte Order Mark)이 있는지 찾아낸다.",
+        "explain": "어떤 파일은 맨 앞에 눈에 안 보이는 표식(BOM)이 붙어 첫 열 이름이 깨져 읽혀요. 그게 있는지 "
+                   "찾습니다(제거는 c0363).",
+        "input": "파일 첫 바이트",
+        "output": "BOM 존재 여부 (meta['has_bom'])",
+    },
+    "c0364": {
+        "goal": "줄바꿈 문자 종류(LF/CRLF/CR)가 섞였는지 찾아낸다.",
+        "explain": "운영체제마다 줄바꿈 표시(LF·CRLF)가 달라 섞이면 줄이 깨질 수 있어요. 어떤 줄바꿈인지·섞였는지 "
+                   "찾습니다(통일은 c0365).",
+        "input": "원본 파일",
+        "output": "줄바꿈 종류 (meta['line_ending'])",
+    },
+    "c0366": {
+        "goal": "칸을 나누는 구분자(쉼표·탭·세미콜론)가 무엇인지 찾아낸다.",
+        "explain": "CSV는 값을 쉼표·탭 등으로 나누는데, 무엇으로 나눴는지 알아야 표로 읽혀요. 그 구분자를 찾습니다"
+                   "(쉼표로 통일=c0367).",
+        "input": "원본 파일",
+        "output": "구분자 (meta['delimiter'])",
+    },
+    "c0368": {
+        "goal": "파일 안의 시트(엑셀 탭) 목록을 찾아 정리한다.",
+        "explain": "엑셀에 여러 시트(탭)가 있으면 어디에 투약·농도·인적사항이 들어 있는지 먼저 목록을 만들어야 해요.",
+        "input": "파일(엑셀·여러 시트)",
+        "output": "시트 목록 (meta['sheet_inventory'])",
+    },
+    "c0370": {
+        "goal": "엑셀 수식 글자(‘=SUM(...)’ 등)가 값 대신 남아 있는지 찾아낸다.",
+        "explain": "엑셀에서 수식이 값으로 안 바뀌고 ‘=SUM(...)’ 글자로 남으면 숫자로 못 읽어요. 그런 수식이 있는지 "
+                   "찾습니다(처리는 c0371).",
+        "input": "표",
+        "output": "수식 잔존 여부 (meta['has_formulas'])",
+    },
+    "c0372": {
+        "goal": "엑셀 날짜가 숫자(일련번호, 예: 43831)로 남아 있는지 찾아낸다.",
+        "explain": "엑셀은 날짜를 속으로 숫자로 저장해서, 가끔 ‘43831’ 같은 숫자로 보여요. 그런 날짜 숫자를 찾습니다"
+                   "(날짜로 변환=c0373).",
+        "input": "날짜/시간 열",
+        "output": "날짜 일련번호 존재 여부 (meta['has_date_serial'])",
+    },
+    "c0374": {
+        "goal": "소수점이 쉼표(‘1,5’)거나 천 단위 쉼표(‘1,000’)인지 찾아낸다.",
+        "explain": "나라마다 소수점을 ‘.’ 대신 ‘,’로 쓰기도 해서(‘1,5’=1.5), 그대로 읽으면 숫자가 틀려요. 그런 표기를 "
+                   "찾습니다(통일은 c0375).",
+        "input": "숫자 열(텍스트로 저장된)",
+        "output": "비표준 소수점 여부 (meta['has_non_ascii_decimal'])",
+    },
+    "c0376": {
+        "goal": "과학적 표기(‘1E+3’=1000 같은 표기)가 있는지 찾아낸다.",
+        "explain": "큰/작은 수를 ‘1E+3’처럼 적은 게 글자로 남으면 숫자로 못 읽을 수 있어요. 그런 표기를 찾습니다"
+                   "(숫자로 풀기=c0377).",
+        "input": "숫자 열",
+        "output": "과학적 표기 여부 (meta['has_sci_notation'])",
+    },
+    "c0378": {
+        "goal": "한 셀(칸) 안에 줄바꿈이 들어 있는지 찾아낸다.",
+        "explain": "한 칸 안에 줄바꿈(엔터)이 있으면 그 줄이 두 줄로 잘못 읽힐 수 있어요. 그런 칸을 찾습니다(처리는 c0379).",
+        "input": "표",
+        "output": "셀 내 줄바꿈 여부 (meta['has_cell_linebreak'])",
+    },
+    "c0380": {
+        "goal": "공변량(체중 등 부가 정보)이 가로로 펼쳐졌는지(wide) 세로로 길게(long) 있는지 찾아낸다.",
+        "explain": "체중이 ‘WT_방문1, WT_방문2’처럼 옆으로 펼쳐졌는지(wide=가로), 한 줄에 하나씩(long=세로) 인지 "
+                   "확인만 합니다(모양 바꾸기=피벗은 나중 단계).",
+        "input": "공변량 열",
+        "output": "공변량 배치 (meta['cov_layout']) — wide/long/none",
+    },
+    "c0381": {
+        "goal": "공변량 배치를 분류해 태그를 붙인다(피벗은 나중 단계로 미룸).",
+        "explain": "c0380이 찾은 배치(wide=가로/long=세로)를 분류해 표시만 합니다. 실제 가로→세로 변환(피벗=PIVOT)은 "
+                   "뒤 단계(L-2↔L-3)에서 해요.",
+        "input": "meta['cov_layout']",
+        "output": "배치 분류 태그(피벗은 2b 단계로 미룸)",
+    },
+    "c0390": {
+        "goal": "투약 전 시점 표기(음수 시간·‘PRE’·t=0)가 어떻게 돼 있는지 찾아낸다.",
+        "explain": "약 먹기 ‘전’ 채혈을 음수 시간(-0.5), ‘PRE’, 0 등으로 제각각 적어요. 어떤 방식인지 찾습니다"
+                   "(통일은 c0391).",
+        "input": "시간/투약 열",
+        "output": "투약 전 코딩 패턴 (meta['predose_pattern'])",
+    },
+    "c0392": {
+        "goal": "위약(가짜약)군 피험자가 있는지 찾아낸다(투여량 0 vs 투약 누락 구분).",
+        "explain": "위약군은 일부러 약을 0으로 준 거라, ‘투여량 0(의도)’과 ‘투약 기록 빠짐(결함)’을 구분해야 해요. "
+                   "위약군이 있는지 찾습니다(분류는 c0393).",
+        "input": "투약 열, 피험자 정보",
+        "output": "위약군 존재 여부 (meta['has_placebo'])",
+    },
+    "c0393": {
+        "goal": "위약군을 가려내고 ‘투여량 0(의도된 위약)’ vs ‘투약 누락(결함)’으로 분류한다.",
+        "explain": "투여량이 0인 게 일부러(위약)인지 실수로 빠진 건지 분류해, 진짜 위약군 피험자 목록을 만듭니다.",
+        "input": "meta['has_placebo']",
+        "output": "위약군 피험자 목록 (meta['placebo_subjects'])",
+    },
+    "c0394": {
+        "goal": "뜻이 문서에 없는 정체불명 표시 열(예: OLD_DATA·FLAG)이 있는지 찾아낸다.",
+        "explain": "예전에 누가 붙인 ‘OLD_DATA’, ‘EXCLUDE’ 같은 열이 설명 없이 있으면 함부로 못 써요. 그런 열 이름·값을 "
+                   "찾아 보고합니다(임의 해석 금지).",
+        "input": "모든 열",
+        "output": "정체불명 표시 열 존재 여부·목록 (meta['legacy_flag_columns'])",
+    },
+    "c0396": {
+        "goal": "실세계/TDM 데이터에서 투약 이력이 환자 진술에만 의존하는지 찾아낸다.",
+        "explain": "실제 진료 데이터(RWD)나 치료약물모니터링(TDM)은 ‘환자가 말한’ 투약에만 의존할 때가 있어 "
+                   "불확실해요. 그런지 확인합니다(불확실하면 Q15C).",
+        "input": "투약 열, meta['study_design']",
+        "output": "투약 이력 불확실 여부 (meta['rwd_adherence_unresolved'])",
+    },
+    # ── TRANSFORM 나머지 (실제로 데이터를 고침) ──────────────────────────────────
+    "c0010": {
+        "goal": "각 행의 사건 종류를 NONMEM의 EVID 코드(숫자)로 매긴다.",
+        "explain": "‘투약/관측/리셋’ 같은 사건 라벨을 NONMEM이 아는 숫자(EVID: 투약=1, 관측=0, 리셋=2, 리셋+투약=3, "
+                   "항정상태 투약=4)로 바꿔요. 못 매기는 행은 사람에게 묻는 질문(Q04)으로 표시.",
+        "input": "event_type(사건 라벨: dose/obs/reset 등) 열",
+        "output": "+EVID 열 (0~4 정수)",
+    },
+    "c0012": {
+        "goal": "투여량(AMT) 열을 NONMEM 규격으로 표준화한다.",
+        "explain": "투약 행(EVID 1·3·4)은 투여량 AMT>0이어야 하고, 투약이 아닌 행(EVID 0·2)은 AMT=0이에요. 투약인데 "
+                   "AMT가 비었으면 질문(Q08).",
+        "input": "EVID 열, 원본 투여량(dose_amount)",
+        "output": "+AMT 열 (투약>0, 비투약=0)",
+    },
+    "c0013": {
+        "goal": "구획 번호(CMT=약이 들어가는 칸 번호)를 A8 정책대로 매긴다.",
+        "explain": "약 하나면 투약 칸=1·관측 칸=2처럼 간단하지만, 여러 약/대사체면 분석물질·경로별로 칸 번호를 "
+                   "나눠요. 규칙이 없으면 질문(Q09).",
+        "input": "EVID·analyte_label(분석물질명)·투여경로, A8 축 상태",
+        "output": "+CMT 열 (양의 정수)",
+    },
+    "c0014": {
+        "goal": "주입 속도(RATE) 열을 매긴다(한번에 주사 vs 천천히 주입 구분).",
+        "explain": "한번에 주사(bolus)면 RATE=0, 일정 속도로 천천히 주입하면 RATE>0(투여량÷시간), 모델이 속도를 "
+                   "추정하면 -1, 시간 추정이면 -2예요.",
+        "input": "EVID·원본 주입속도/주입시간",
+        "output": "+RATE 열 (0, >0, -1, -2)",
+    },
+    "c0015": {
+        "goal": "규칙적 반복 투여를 ADDL(추가 투여 횟수)로 압축한다.",
+        "explain": "같은 사람에게 같은 용량을 일정 간격으로 여러 번 주면, 첫 행에 ‘추가로 몇 번 더(ADDL)’를 적어 "
+                   "줄 수를 줄여요. 반복 정보가 실제 투약과 충돌하면 질문(Q14).",
+        "input": "EVID·AMT·TIME·개체ID, A4 축 상태",
+        "output": "+ADDL 열 (0 이상 정수)",
+    },
+    "c0016": {
+        "goal": "반복 투여 간격(II)을 매긴다.",
+        "explain": "ADDL(추가 투여 횟수)이 있는 행에 ‘몇 시간마다 줬는지(II=투여 간격)’를 적어요. ADDL=0이면 II=0. "
+                   "단위는 TIME과 같게.",
+        "input": "ADDL 열·TIME 열",
+        "output": "+II 열 (0 이상; ADDL>0이면 II>0)",
+    },
+    "c0017": {
+        "goal": "관측값(DV=종속 변수=잰 농도 등) 열을 NONMEM 규격으로 표준화한다.",
+        "explain": "실제 관측 행(EVID=0·MDV=0)은 DV에 잰 값을, 관측이 아닌 행은 DV=0 또는 ‘.’을 넣어요. PK 농도는 "
+                   "음수가 없어야 합니다.",
+        "input": "EVID·MDV·원본 관측값(dv_value)",
+        "output": "+DV 열 (숫자 또는 '.')",
+    },
+    "c0018": {
+        "goal": "개체 번호(ID)를 NONMEM 규격(양의 정수)으로 바꾼다.",
+        "explain": "‘PT-001’ 같은 글자 ID를 1, 2처럼 양의 정수로 다시 매겨요. 원본↔정수 대응표를 남겨 나중에 되짚을 "
+                   "수 있게 합니다.",
+        "input": "원본 개체 식별자(subject_id, 문자/숫자 섞여도 됨)",
+        "output": "+ID 열 (앞자리 0 없는 양의 정수)",
+    },
+    "c0019": {
+        "goal": "시간 값을 NONMEM의 TIME(단위 통일된 숫자)으로 바꾼다.",
+        "explain": "A3(시간 정책)에 따라 실제/예정/경과 시간을 골라, ‘1:30’ 같은 표기를 1.5처럼 일관된 숫자(시간 또는 "
+                   "분 단위)로 바꿔요.",
+        "input": "원본 시간값(time_value), A3 축 상태",
+        "output": "+TIME 열 (단위 통일된 실수)",
+    },
+    "c0020": {
+        "goal": "정량 하한 미만(BLQ) 표시 열을 A5 정책대로 만든다.",
+        "explain": "BLQ(너무 낮아 정확히 못 잰 값) 처리 방법이 M3/M4(우도법)면 BLQ 행에 BLQ_FLAG=1을 달고, M1(제외)이면 "
+                   "열을 안 만들어요. 정책이 없으면 질문(Q01).",
+        "input": "EVID·blq_detected, A5 축 상태·BLQ 정책",
+        "output": "+BLQ_FLAG 열 (조건부, 0/1)",
+    },
+    "c0021": {
+        "goal": "정량 하한값(LLOQ) 열을 A5 정책대로 매긴다.",
+        "explain": "BLQ_FLAG 열이 있으면 정량 하한(LLOQ=정확히 잴 수 있는 가장 낮은 값) 열도 있어야 해요. 시점마다 "
+                   "LLOQ가 바뀌면 시점별로 적용. LLOQ가 없으면 질문(Q01).",
+        "input": "EVID·BLQ_FLAG·원본 LLOQ, A5 축 상태",
+        "output": "+LLOQ 열 (관측 행에 양의 실수)",
+    },
+    "c0022": {
+        "goal": "기저 공변량(시작 시점 체중·나이·성별 등)을 NONMEM 숫자 코딩으로 바꾼다.",
+        "explain": "연속값(체중)은 그대로, 범주값(성별 M/F)은 정수(0/1 등)로 바꿔요. 결측은 A7 정책대로 채우되"
+                   "(결측이 남으면 안 됨), 함부로 지어내지 않습니다.",
+        "input": "기저 공변량 열들(범주 문자 포함 가능), A7 축 상태",
+        "output": "공변량 열 → 전부 숫자(연속=실수, 범주=정수)",
+    },
+    "c0023": {
+        "goal": "시간에 따라 변하는 공변량(체중·신장기능 등)을 시점별 숫자로 코딩한다.",
+        "explain": "시점마다 달라지는 값(예: 체중 변화)을 해당 행에 맞춰 넣어요. 빈 시점은 직전 값 유지(LOCF=마지막 "
+                   "값 이어쓰기) 또는 A7 정책으로 채우되, 결측이 남으면 안 됩니다.",
+        "input": "시변 공변량 열들, A7 축 상태·시점 매핑",
+        "output": "시변 공변량 열 → 행마다 숫자",
+    },
+    "c0031": {
+        "goal": "행을 NONMEM 규격으로 정렬한다(개체→시간→투약 먼저).",
+        "explain": "1순위 개체 번호(ID) 오름차순, 2순위 같은 개체 안에서 시간(TIME) 오름차순, 3순위 같은 시각이면 "
+                   "투약 행을 관측 행보다 앞에 둬요.",
+        "input": "ID·TIME·EVID 열(정렬 안 됨)",
+        "output": "같은 열들, 행 순서만 정렬",
+    },
+    "c0111": {
+        "goal": "따로 있는 공변량 시트(체중·나이 등)를 농도 표에 공통 키로 붙인다.",
+        "explain": "인적사항(체중·나이·성별)이 다른 시트에 있으면, 같은 개체를 가리키는 공통 키로 합쳐(조인=JOIN, "
+                   "공통 열로 두 표 합치기) 한 표에 모아요(기준은 농도 표).",
+        "input": "공변량 시트 + 공통 키(c0101에서 식별)",
+        "output": "농도 표에 WT·AGE·SEX 등 공변량 열 추가",
+    },
+    "c0121": {
+        "goal": "가로로 펼쳐진 공변량을 세로로 긴(long) 형태로 바꾼다.",
+        "explain": "체중이 ‘WT_방문1, WT_방문2’처럼 옆으로 펼쳐졌으면(wide=가로), 한 줄에 하나씩(long=세로)으로 "
+                   "녹여요(피벗=PIVOT, 가로↔세로 모양 바꾸기). 이미 long이면 그대로 둡니다.",
+        "input": "wide 형태 공변량 열(예: WT_V1, WT_V2), A7 축 상태",
+        "output": "long 형태 공변량(시점마다 한 줄에 한 값)",
+    },
+    "c0140": {
+        "goal": "기저 공변량을 각 개체의 시작 시점에서 뽑아 그 개체 모든 행에 채워 넣는다.",
+        "explain": "체중·나이 같은 기저값을 개체의 첫 시점에서 가져와 그 사람 모든 줄에 똑같이 붙여요. 기저값이 "
+                   "깨끗하면 그대로, 비었으면 A7 채움 정책 적용.",
+        "input": "공변량 원본 열들, A7 축 상태",
+        "output": "개체별 기저 공변량이 모든 행에 채워짐",
+    },
+    "c0141": {
+        "goal": "시간에 따라 변하는 공변량을 시점에 맞춰 각 행에 붙인다.",
+        "explain": "A7이 ‘시변(시간에 따라 변함)’이면, 시점별 체중·크레아티닌 등을 해당 시각 행에 맞춰 넣어요"
+                   "(외부 시트가 이미 합쳐져(조인=JOIN) 있으면 시점 매핑).",
+        "input": "시변 공변량 열·TIME 열, A7 상태",
+        "output": "시점별 공변량이 각 행에 부착",
+    },
+    "c0161": {
+        "goal": "단위가 섞인 열을 하나의 표준 단위로 변환한다.",
+        "explain": "같은 열에 mg/L과 µg/mL이 섞이면 값이 틀려요. 변환 계수를 적용해 한 표준 단위로 통일합니다. "
+                   "몰농도↔질량 변환에 분자량(MW)이 필요하면 질문(Q10).",
+        "input": "단위가 섞인 숫자 열들, 단위 지도",
+        "output": "열마다 단일 표준 단위로 통일된 숫자",
+    },
+    "c0306": {
+        "goal": "c0305가 찾은 BLQ 표기를 표준 표시로 바꾸고 정량 하한값(LLOQ)을 보존한다.",
+        "explain": "‘<0.1’ 같은 표기를 표준 빈값으로 바꾸되, 그 숫자(0.1)는 정량 하한(LLOQ)으로 따로 보존하고 "
+                   "‘BLQ였음’ 표시도 남겨요(값을 함부로 0으로 단정하지 않음).",
+        "input": "c0305가 찾은 BLQ 표기 목록",
+        "output": "BLQ 표기 → 표준 표시 + LLOQ 숫자 열 보존",
+    },
+    "c0311": {
+        "goal": "찾아낸 시간 형식을 숫자(경과 시간) 또는 표준 날짜시각으로 끝까지 바꾼다.",
+        "explain": "‘1:30’ 같은 표기를 1.5(시간)처럼 계산 가능한 숫자로, 또는 표준 날짜시각(ISO)으로 파싱(컴퓨터가 "
+                   "읽을 수 있게 해석)해요.",
+        "input": "meta['time_format_detected']",
+        "output": "time_value → 숫자/표준 날짜시각으로 파싱 완료",
+    },
+    "c0313": {
+        "goal": "여러 시간대를 하나의 기준으로 통일한다.",
+        "explain": "KST·JST처럼 섞인 시간대를 한 기준으로 맞추고, 서머타임·12/24시간 모호함을 없애요.",
+        "input": "meta['tz_issues']",
+        "output": "시간값 → 단일 시간대로 통일",
+    },
+    "c0315": {
+        "goal": "시간 기준점 표기(Day 1 등)를 비교 가능한 숫자로 바꾼다.",
+        "explain": "‘Day 1’, ‘Day 2’ 같은 기준점을 0시간, 24시간처럼 비교 가능한 숫자로 파싱(해석)해요.",
+        "input": "meta['time_anchor_type']",
+        "output": "기준점 → 비교 가능한 숫자",
+    },
+    "c0321": {
+        "goal": "개체 번호(ID) 자료형을 하나로 통일한다.",
+        "explain": "숫자 1과 글자 ‘002’처럼 섞인 ID를 같은 형식(전부 문자 또는 전부 숫자)으로 맞춰, 같은 개체가 "
+                   "갈라지지 않게 해요.",
+        "input": "meta['id_dtype_mixed']",
+        "output": "subject_id → 균일한 자료형",
+    },
+    "c0323": {
+        "goal": "ID의 앞자리 0을 정책대로 처리한다(보존 또는 제거).",
+        "explain": "‘001’의 앞 0을 살릴지 뺄지 정책에 따라 일관되게 처리해요(여기선 보통 보존).",
+        "input": "meta['has_leading_zero']",
+        "output": "subject_id → 앞자리 0 정책대로 처리됨",
+    },
+    "c0331": {
+        "goal": "단위 표기를 표준형으로 바꾼다(㎍→µg 등).",
+        "explain": "‘㎍/㎖’ 같은 특수문자 단위를 표준 표기(µg/mL)로 바꿔 컴퓨터가 일관되게 읽게 해요.",
+        "input": "meta['unit_status']",
+        "output": "단위 표준화·태깅",
+    },
+    "c0341": {
+        "goal": "엑셀 병합 셀로 생긴 빈칸을 위 값으로 채운다(아래로 흘려보냄).",
+        "explain": "병합 셀은 첫 칸만 값이 있고 아래가 비어요. 위 값을 아래로 채워(forward-fill=아래로 채우기) 모든 "
+                   "행에 제대로 값이 들어가게 합니다. 병합 잔존 0개.",
+        "input": "meta['has_merged_cells']",
+        "output": "병합으로 빈 칸이 위 값으로 채워짐",
+    },
+    "c0343": {
+        "goal": "두 줄짜리 머리글(다단 헤더)을 한 줄로 편다.",
+        "explain": "위·아래 두 층 제목줄을 합쳐 한 줄 이름(예: ‘PK_ID’)으로 만들어 컴퓨터가 열을 제대로 알아보게 해요.",
+        "input": "meta['has_multi_header']",
+        "output": "단일 행 평탄 헤더",
+    },
+    "c0345": {
+        "goal": "표 끝에 붙은 빈 행을 제거한다.",
+        "explain": "데이터 뒤에 따라붙은 빈 행을 지워 행 수가 정확해지게 해요.",
+        "input": "meta['n_trailing_blank']",
+        "output": "꼬리 빈 행 제거됨",
+    },
+    "c0347": {
+        "goal": "완전히 똑같은 행을 ‘표시(flag)’한다(삭제는 안 함).",
+        "explain": "완전 중복 행에 표시만 달아요(함부로 지우지 않음 — 진짜 반복일 수도 있어 사람이 확인하도록).",
+        "input": "meta['n_exact_duplicates']",
+        "output": "+duplicate_flag 열(중복 표시)",
+    },
+    "c0351": {
+        "goal": "말로 적힌 투여량(‘100 mg’)에서 숫자와 단위를 뽑아낸다.",
+        "explain": "‘100 mg’을 (숫자 100, 단위 ‘mg’)로 분리해 계산 가능하게 해요. 애매하면 질문(Q08).",
+        "input": "meta['has_nl_dose']",
+        "output": "투여량 → (숫자, 단위)",
+    },
+    "c0353": {
+        "goal": "말로 적힌 시간(‘after 30 min’)을 숫자 시간으로 뽑아낸다.",
+        "explain": "‘투약 전’→-0.5, ‘30분 후’→0.5처럼 말로 된 시간을 숫자(시간 단위)로 바꿔요.",
+        "input": "meta['has_nl_time']",
+        "output": "시간 → 숫자(시간)",
+    },
+    "c0355": {
+        "goal": "자유 텍스트 메모 열을 데이터 열과 분리한다.",
+        "explain": "긴 메모(코멘트) 열을 분석값 열과 떼어 내, 숫자 분석을 방해하지 않게 해요(메모는 따로 보존).",
+        "input": "meta['freetext_cols']",
+        "output": "메모 열이 분리됨",
+    },
+    "c0361": {
+        "goal": "파일 인코딩(글자 저장 방식)을 UTF-8로 바꾼다.",
+        "explain": "cp949 등으로 저장돼 깨지는 한글을, 표준 방식(UTF-8)으로 바꿔 안 깨지게 해요.",
+        "input": "meta['detected_encoding']",
+        "output": "인코딩 = UTF-8",
+    },
+    "c0363": {
+        "goal": "파일 맨 앞의 보이지 않는 표식(BOM)을 제거한다.",
+        "explain": "맨 앞 숨은 표식(BOM) 때문에 첫 열 이름이 깨지면, 그 표식을 떼어 내요.",
+        "input": "meta['has_bom']",
+        "output": "BOM 제거됨",
+    },
+    "c0365": {
+        "goal": "줄바꿈 문자를 하나로 통일한다(LF 또는 CRLF).",
+        "explain": "섞인 줄바꿈 표시를 한 가지로 맞춰 줄이 깨지지 않게 해요.",
+        "input": "meta['line_ending']",
+        "output": "일관된 줄바꿈",
+    },
+    "c0367": {
+        "goal": "칸 구분자를 쉼표로 표준화한다.",
+        "explain": "탭·세미콜론 등으로 나뉜 값을 표준 쉼표(comma) 구분으로 바꿔요.",
+        "input": "meta['delimiter']",
+        "output": "구분자 = 쉼표",
+    },
+    "c0371": {
+        "goal": "남아 있는 엑셀 수식 글자를 값으로 평가하거나 제거한다.",
+        "explain": "‘=SUM(...)’ 글자를 실제 계산값으로 바꾸거나 지워, 숫자로 읽히게 해요.",
+        "input": "meta['has_formulas']",
+        "output": "수식 글자 → 값/제거",
+    },
+    "c0373": {
+        "goal": "엑셀 날짜 숫자(일련번호)를 진짜 날짜로 바꾼다.",
+        "explain": "‘43831’ 같은 엑셀 내부 날짜 숫자를 ‘2020-01-01’ 같은 날짜로 변환해요.",
+        "input": "meta['has_date_serial']",
+        "output": "일련번호 → 날짜",
+    },
+    "c0375": {
+        "goal": "소수점을 ‘.’으로 통일하고 천 단위 구분자를 없앤다.",
+        "explain": "‘1,5’(=1.5)의 쉼표 소수점을 ‘.’으로 바꾸고, ‘1,000’의 천 단위 쉼표를 없애 숫자로 제대로 읽히게 해요.",
+        "input": "meta['has_non_ascii_decimal']",
+        "output": "소수점=‘.’, 천 단위 구분자 제거",
+    },
+    "c0377": {
+        "goal": "과학적 표기(‘1E+3’)를 보통 숫자(1000)로 푼다.",
+        "explain": "‘1E+3’ 같은 표기가 글자로 남으면 보통 숫자(1000)로 풀어 계산되게 해요.",
+        "input": "meta['has_sci_notation']",
+        "output": "과학적 표기 → 보통 숫자",
+    },
+    "c0379": {
+        "goal": "한 칸 안의 줄바꿈을 없애거나 안전하게 바꾼다.",
+        "explain": "칸 안 줄바꿈(엔터) 때문에 줄이 잘못 갈라지지 않게, 그 줄바꿈을 제거하거나 공백 등으로 바꿔요.",
+        "input": "meta['has_cell_linebreak']",
+        "output": "칸 내 줄바꿈 제거/치환",
+    },
+    "c0391": {
+        "goal": "투약 전 시점 표기를 정책대로 하나로 통일한다.",
+        "explain": "‘PRE’, 음수 시간 등 제각각인 투약 전 표기를 일관된 값(예: -0.5)으로 맞춰요.",
+        "input": "meta['predose_pattern']",
+        "output": "투약 전 코딩 표준화",
+    },
+    # ── VERIFY (검사; 데이터 안 바꾸고 통과/실패만 판정) ─────────────────────────
+    "c0001": {
+        "goal": "깔끔한 long 표(L-2)가 NONMEM 열을 만들 준비가 됐는지 검사한다.",
+        "explain": "사건 종류·개체·시간·투여량·농도 같은 ‘뜻이 있는 열’이 다 있고 결측 없이 매핑되는지 확인해요. "
+                   "통과해야 다음(NONMEM 열 부여)으로 갑니다.",
+        "input": "L-2 tidy long 표(한 줄=한 측정)",
+        "output": "통과/실패 판정만(데이터 안 바꿈)",
+    },
+    "c0030": {
+        "goal": "행이 NONMEM 순서(개체→시간 오름차순)대로 정렬됐는지 검사한다.",
+        "explain": "개체 번호가 커지는 순서, 같은 개체 안에서 시간이 커지는 순서인지 확인해요. 어긋나면 정렬 작업"
+                   "(c0031)을 부르고, 시간이 모호하면 질문(Q02/Q04).",
+        "input": "ID·TIME·EVID 열",
+        "output": "통과/실패 판정만",
+    },
+    "c0040": {
+        "goal": "각 행이 지켜야 할 규칙(행 수준 불변 조건)을 모두 만족하는지 검사한다.",
+        "explain": "예: 개체 번호는 양의 정수, 투약 행은 투여량>0, 관측 행은 값 존재, ADDL↔II 짝 맞음 등 행별 규칙"
+                   "(I-R01~I-R15)을 다 지키는지 봐요.",
+        "input": "NONMEM 핵심 열 전부(ID·TIME·DV·MDV·EVID·AMT·CMT 등)",
+        "output": "통과/실패 + 위반 행 목록",
+    },
+    "c0041": {
+        "goal": "데이터셋 전체가 지켜야 할 규칙(데이터셋 수준 불변 조건)을 검사한다.",
+        "explain": "예: 유효 관측이 최소 1개 있는지, 머리글이 있는지, 투약 기록이 있는지, 단위가 일관된지"
+                   "(I-D01~I-D07) 등 전체 규칙을 봐요.",
+        "input": "NONMEM 데이터셋 전체",
+        "output": "통과/실패 + 위반 목록",
+    },
+    "c0100": {
+        "goal": "여러 시트 중 투약 시트를 찾고, 합칠 공통 키가 있는지 검사한다.",
+        "explain": "투약 정보가 별도 시트에 있을 때, 그 시트가 있는지와 농도 표와 합칠 공통 열(개체·방문·날짜)이 "
+                   "있는지 확인해요. 키가 없으면 질문(Q08/Q15A).",
+        "input": "시트별 표 목록과 시트 정보",
+        "output": "투약 시트 존재 + 공통 키 유효 판정",
+    },
+    "c0101": {
+        "goal": "여러 시트 중 공변량 시트를 찾고, 합칠 공통 키가 있는지 검사한다.",
+        "explain": "인적사항(체중·나이·성별)이 별도 시트에 있을 때, 그 시트와 합칠 공통 키가 있는지 확인해요. "
+                   "키가 없으면 질문(Q13/Q07).",
+        "input": "시트별 표 목록과 시트 정보",
+        "output": "공변량 시트 존재 + 공통 키 유효 판정",
+    },
+    "c0102": {
+        "goal": "여러 분석물질이 가로로 펼쳐졌는지 검사하고 피벗(가로→세로) 전략을 정한다.",
+        "explain": "약이 여러 개면 농도가 ‘DRUG_A, DRUG_B’처럼 옆으로 펼쳐졌는지 보고, 세로로 녹일(피벗=PIVOT) 대상 "
+                   "열을 정해요. 못 하면 질문(Q09).",
+        "input": "가로형일 수 있는 분석물질 열, A8 축 상태",
+        "output": "피벗 전략 결정(데이터 안 바꿈)",
+    },
+    "c0160": {
+        "goal": "한 열 안에서 단위가 일관적인지 검사한다.",
+        "explain": "같은 농도 열에 mg/L과 µg/mL이 섞이거나 몰농도/질량이 섞이지 않았는지 확인해요. 필요했던 단위 "
+                   "변환이 끝났는지도 봅니다. 불일치면 질문(Q10).",
+        "input": "단위 정보가 있는 숫자 열",
+        "output": "단위 일관성 통과/실패",
+    },
+    "c0209": {
+        "goal": "구조 결함(중복·정렬·단위·인코딩 등)을 고칠 수 있는지 13가지 중 하나로 판정한다.",
+        "explain": "깨끗한지, 완전 중복·정렬 안 됨·열 이름 동의어·단위 불일치·인코딩(글자 저장 방식) 문제 등 어떤 "
+                   "결함인지 정해요. "
+                   "프로토콜 위반 처리 규칙이 없으면 질문(Q06), 무결성이 깨져 못 고치면 되살리기 불가(INVALID).",
+        "input": "전체 표, 데이터 품질 지표",
+        "output": "결함 수리 상태 하나 (meta$a9_state) — 예: 'DUPLICATE-EXACT'",
+    },
+    "c0213": {
+        "goal": "시간 기준점(언제를 0으로 볼지)이 일관되고 해석 가능한지 검사한다.",
+        "explain": "‘Day 1’과 ‘Visit 1’, 날짜가 섞이지 않았는지 확인해요. 모호하면 질문(Q02).",
+        "input": "시간 기준점 표기/정보",
+        "output": "기준점 일관성 통과/실패",
+    },
+    "c0214": {
+        "goal": "모든 숫자 열에 단위가 빠짐없이 선언됐는지 검사한다.",
+        "explain": "농도·체중 등 모든 수치 열에 단위가 적혀 있는지, 몰↔질량 변환에 분자량(MW)이 필요한지 봐요. "
+                   "단위 사전이 불완전하면 질문(Q10).",
+        "input": "열별 단위 선언 정보",
+        "output": "단위 선언 완전성 통과/실패",
+    },
+    "c0369": {
+        "goal": "모든 시트가 빠짐없이 작업 공간에 불러와졌는지 검사한다.",
+        "explain": "엑셀의 모든 시트(탭)가 다 로드됐는지 확인해요(누락되면 데이터가 통째로 빠질 수 있어서). "
+                   "누락이면 질문(Q15A).",
+        "input": "meta['sheet_inventory']",
+        "output": "모든 시트 로드 확인",
+    },
+    # ── ROUTE (갈림길; 데이터 안 고치고 '어느 질문 Q로 보낼지'만 결정) ───────────
+    "c0043": {
+        "goal": "열 구조 검사 실패(c0001)를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "분석 목적이 안 정해졌으면 Q11, 정체불명 결함이면 Q15X, 핵심 열이 아예 없으면 되살리기 불가"
+                   "(INVALID)로 보내요(고치지 않음).",
+        "input": "c0001이 찾은 스키마(열 구조) 위반",
+        "output": "보낼 질문(Q) 결정 (Q11/Q15X) 또는 INVALID",
+    },
+    "c0170": {
+        "goal": "단위 관련 실패를 단위 사전 질문(Q10)으로 보낸다.",
+        "explain": "분자량(MW)이 없어 몰↔질량 변환을 못 하는 등 단위 실패면 Q10으로 보내요.",
+        "input": "c0160/c0161의 단위 위반",
+        "output": "보낼 곳 결정 — Q10",
+    },
+    "c0251": {
+        "goal": "시간(A3) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "시간 해석이 모호(AMBIGUOUS)하면 Q02, 시간이 아예 되살릴 수 없으면 INVALID로 보내요.",
+        "input": "A3 평가 결과(a3_state)",
+        "output": "보낼 곳 결정 — Q02/Q12 또는 INVALID",
+    },
+    "c0252": {
+        "goal": "투약 완전성(A4) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "투약 기록·복원 규칙 없음→Q08, 반복 투여가 실제와 충돌→Q14, 주입 중단/재개 정책 없음→Q04, "
+                   "핵심 정보 없음→INVALID.",
+        "input": "A4 평가 결과(a4_state)",
+        "output": "보낼 곳 결정 — Q04/Q08/Q14 또는 INVALID",
+    },
+    "c0253": {
+        "goal": "관측/BLQ(A5) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "BLQ(정량 하한 미만)·반복 처리 정책 없음→Q01, 여러 분석 결과 중 최종본 표시 없음→Q15D, "
+                   "관측값 없음→INVALID.",
+        "input": "A5 평가 결과(a5_state)",
+        "output": "보낼 곳 결정 — Q01/Q15D 또는 INVALID",
+    },
+    "c0254": {
+        "goal": "공변량(A7) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "외부 공변량 표의 연결 키(공통 열)가 없으면 Q13, 결측 채우는 방법이 없으면 Q07로 보내요.",
+        "input": "A7 평가 결과(a7_state)",
+        "output": "보낼 곳 결정 — Q07/Q13",
+    },
+    "c0255": {
+        "goal": "다약물/구획(A8) 평가 실패를 구획 질문(Q09)으로 보낸다.",
+        "explain": "구획 번호(CMT) 배정 규칙이 없으면(CMT-POLICY-MISSING) Q09로 보내요.",
+        "input": "A8 평가 결과(a8_state)",
+        "output": "보낼 곳 결정 — Q09",
+    },
+    "c0256": {
+        "goal": "결함 수리(A9) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "프로토콜 위반 처리 규칙 없음→Q06, 재분석 최종본 표시 없음→Q15D, 무결성이 깨져 못 고침→INVALID.",
+        "input": "A9 평가 결과(a9_state)",
+        "output": "보낼 곳 결정 — Q06/Q15D 또는 INVALID",
+    },
+    "c0257": {
+        "goal": "행 분류(A6) 평가 실패를 알맞은 질문(Q)으로 보낸다.",
+        "explain": "행이 투약인지 관측인지 모호(AMBIGUOUS)하면 Q04로 보내요(회차 정의 모호는 Q03).",
+        "input": "A6 평가 결과(a6_state)",
+        "output": "보낼 곳 결정 — Q03/Q04",
+    },
+    "c0333": {
+        "goal": "단위 선언 불완전(또는 분자량 없음)을 단위 사전 질문(Q10)으로 보낸다.",
+        "explain": "단위가 빠졌거나 몰↔질량 변환에 필요한 분자량(MW)이 없으면 Q10으로 보내요.",
+        "input": "단위 점검 결과",
+        "output": "보낼 곳 결정 — Q10",
+    },
+    "c0499": {
+        "goal": "어떤 처리로도 안 잡히는 정체불명 결함을 catch-all 질문(Q15X)으로 보낸다.",
+        "explain": "감지·정규화 어디에도 안 걸리는 미분류 결함은 마지막으로 Q15X(모르는 결함 모음)로 보내요. "
+                   "강한 페널티(점수 크게 깎임)가 붙습니다.",
+        "input": "처리 안 된 결함 표시",
+        "output": "보낼 곳 결정 — Q15X(catch-all, 페널티)",
+    },
 }
 
 _AXIS_RE = re.compile(r"a(\d+)_state")
@@ -465,8 +1256,9 @@ def _axis_of(raw: dict):
 
 
 def _easy_states(raw: dict, axis):
-    """detect/axis-eval c의 보기별 행선지. 종료 매핑은 정본 llm_prompt의 'STATE→TERMINAL' 화살표에서만 취득."""
-    if not axis or raw.get("kind") != "detect":
+    """축(axis) 평가 c의 보기별 행선지(detect∪verify — c0200/c0204 등 verify-축 포함).
+    종료 매핑은 정본 llm_prompt의 'STATE→TERMINAL' 화살표에서만 취득(날조 0)."""
+    if not axis:
         return None
     tmap = dict(_ARROW_RE.findall(raw.get("llm_prompt", "") or ""))
     out = []
@@ -500,6 +1292,10 @@ def _llm_request(raw: dict, seed: dict, states) -> str:
         opts = "; ".join("%s = %s" % (s["code"], (s["plain"].split("→")[0].strip() or s["code"]))
                          for s in states)
         lines.append("[분류 보기] 아래 중 정확히 하나로 판정하고, 판별 규칙을 코드에 담아줘 — " + opts)
+    cq = raw.get("can_route_to_q") or []
+    if cq and not states:
+        lines.append("[막히면 보낼 질문(Q)] 조건이 안 맞으면 " + ", ".join(cq)
+                     + " 중 해당하는 질문으로 라우팅(routing=어디로 보낼지 결정)하도록 코드에 표시.")
     if ba.get("before"):
         lines.append("[예시] 입력 « %s » → 출력 « %s »"
                      % (str(ba.get("before", "")).replace("\n", " / "),
@@ -527,7 +1323,33 @@ def easy_card(raw: dict) -> dict:
     }
 
 
-EASY = {cid: easy_card(_RAW[cid]) for cid in EASY_PILOT}
+EASY = {cid: easy_card(_RAW[cid]) for cid in _EASY_SEED}
+
+
+def _cunits_extra() -> dict:
+    """B.CUNITS(트리-배선 57개)에 없는 c의 패널 렌더용 필드(정본 c_units.json 파생).
+    → 전체 122 c의 쉬운 카드를 그래프 배선과 무관하게 열람 가능(report-only, spec 무수정)."""
+    have = set(B.CUNITS)
+    out = {}
+    for cid, raw in _RAW.items():
+        if cid in have:
+            continue
+        ba = raw.get("before_after_toy_example") or {}
+        out[cid] = {
+            "c_id": cid, "c_name_ko": raw.get("c_name_ko"), "srp_intent": raw.get("srp_intent"),
+            "kind": raw.get("kind"), "cost": raw.get("cost"), "layer_pair": raw.get("layer_pair"),
+            "requires_detection_by": raw.get("requires_detection_by"), "ref": raw.get("ref"),
+            "llm_prompt": raw.get("llm_prompt"),
+            "precondition_checklist_ko": raw.get("precondition_checklist_ko") or [],
+            "r_snippet": raw.get("r_snippet"), "python_snippet": raw.get("python_snippet"),
+            "verify_visualization": raw.get("verify_visualization"),
+            "can_route_to_q": raw.get("can_route_to_q") or [],
+            "before": ba.get("before"), "after": ba.get("after"), "fam": raw.get("fam"),
+        }
+    return out
+
+
+CUNITS_EXTRA = _cunits_extra()
 
 
 def assert_glossary_complete():
@@ -629,6 +1451,33 @@ _EXTRA_CSS = """
   .pnode.goal{background:#43a047;color:#fff}
   .parrow{color:#E8820C;font-weight:700}
   .parrow.d{color:#7d9bbb}
+  /* attach 가이드(마법사 상단) */
+  .attachguide{border:1px solid #cfe0f5;border-radius:8px;background:#f6faff;margin-bottom:11px;padding:1px 4px}
+  .attachguide>summary{cursor:pointer;font-size:12.5px;font-weight:700;color:#16314f;padding:8px}
+  .agbody{font-size:12px;line-height:1.7;color:#33404d;padding:2px 10px 9px}
+  .agsteps{margin:7px 0 0;padding-left:18px}
+  .agsteps li{margin:5px 0}
+  .agmanual{color:#b3541e;background:#fff1e6;border:1px solid #f0c9a8;border-radius:5px;padding:1px 5px;font-size:11px}
+  .agflow{margin:6px 0 2px;display:flex;flex-wrap:wrap;align-items:center;gap:3px}
+  .agn{display:inline-block;font-size:11px;background:#fff;border:1px solid #d7e6ee;border-radius:5px;padding:1px 6px;cursor:help}
+  .agar{color:#E8820C;font-weight:700;margin:0 1px}
+  /* 전체 작업 카드(122) 목록 모달 */
+  #cardMask{display:none;position:fixed;inset:0;background:rgba(20,30,40,.42);z-index:2000}
+  #cardMask.on{display:flex;align-items:center;justify-content:center}
+  #cardBox{background:#fff;border-radius:12px;width:94%;max-width:1040px;height:86vh;display:flex;flex-direction:column;
+     box-shadow:0 14px 44px rgba(0,0,0,.32);overflow:hidden}
+  #cardBox>h2{font-size:15px;margin:0;padding:12px 16px;border-bottom:1px solid var(--line);display:flex;
+     justify-content:space-between;align-items:center;background:#fafbfc}
+  #cardWrap{display:flex;flex:1;min-height:0}
+  #cardList{width:330px;border-right:1px solid var(--line);overflow:auto;padding:8px}
+  #cardSearch{width:100%;box-sizing:border-box;padding:6px 8px;font-size:12px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px}
+  #cardRows .clgrp h4{font-size:11.5px;color:#3a4651;margin:9px 2px 3px;border-bottom:1px solid var(--line);padding-bottom:2px}
+  .clrow{font-size:12px;padding:4px 6px;border-radius:5px;cursor:pointer;line-height:1.45}
+  .clrow:hover{background:#eef6ff}
+  .clrow.sel{background:#dcebff}
+  .clcode{font-family:Consolas,monospace;font-size:11px;color:#1b4f8a;background:#eaf1fb;border-radius:4px;padding:0 4px}
+  .clkind{font-size:10px;color:#8a97aa}
+  #cardDetail{flex:1;overflow:auto;padding:12px 14px}
 """
 
 
@@ -645,6 +1494,7 @@ def page_head_v2() -> str:
         '<button class="btn" id="clearSel" type="button">선택 해제</button>',
         '<button class="btn" id="wizardBtn" type="button" style="background:#e8f4ff;border-color:#9cc6f0;font-weight:700">🔍 내 파일 진단</button>\n'
         '  <button class="btn" id="glossBtn" type="button" style="background:#f1f0fb;border-color:#cfc8ee">📖 용어집</button>\n'
+        '  <button class="btn" id="cardBtn" type="button" style="background:#eafaf1;border-color:#a8dcc0;font-weight:700">📋 작업 카드 122</button>\n'
         '  <button class="btn" id="clearSel" type="button">선택 해제</button>')
     # 안내 기본 문구(쉬운 말)
     ph = ph.replace("노드를 클릭하면 경로(N0→현재)가 표시됩니다.",
@@ -672,7 +1522,7 @@ _V2_OVERRIDE = r'''<script>
   function chip(code, cat){
     var tip;
     if(cat==="srp") tip=plainSrp(code);
-    else if(cat==="c") tip=((CUNITS[code]||{}).c_name_ko)||code;
+    else if(cat==="c") tip=((CUNITS[code]||CUNITS_EXTRA[code]||{}).c_name_ko)||code;
     else tip=gloss(cat, code);
     return '<span class="codechip" data-tip="'+E(tip||code)+'">'+E(code)+'</span>';
   }
@@ -700,7 +1550,7 @@ _V2_OVERRIDE = r'''<script>
 
   /* ---- (c 패널) 변환/감지/검사/분기 — 쉬운 말 4섹션 ---- */
   window.renderCPanel = function(id){
-    var c=CUNITS[id]; if(!c) return window.renderNodePanel(id,"node");
+    var c=CUNITS[id]||(window.CUNITS_EXTRA&&CUNITS_EXTRA[id]); if(!c) return window.renderNodePanel(id,"node");
     if(window.EASY && EASY[id]) return renderEasyCPanel(id, c, EASY[id]);
     var h=colorNote();
     var chk=(c.precondition_checklist_ko||[]).map(function(t,i){
@@ -770,8 +1620,11 @@ _V2_OVERRIDE = r'''<script>
       }).join("");
       h+=sect("③ 보기 — 내 파일이 어디에 해당하고, 그러면 어디로 가나",
               rows+'<div style="margin-top:7px">'+kv("통과하면 →", passChip(ez.pass_to))+kv("막히면 →", failChip(ez.fail_to))+'</div>');
-    }else{
+    }else if(c.kind==="transform"){
       h+=sect("③ 고치기 전 / 후 — 앰버 칸이 바뀐 부분", renderBeforeAfter(c.before,c.after));
+    }else{
+      h+=sect("③ 무엇을 검사/분기하고, 통과하면 어디로 · 막히면 어디로",
+              window.renderVV(c.verify_visualization, c.can_route_to_q));
     }
     h+=sect("④ 🤖 LLM에게 이대로 복사해 요청하세요 — 이 작업에 맞는 R 스크립트를 만들어 줍니다",
             '<button class="btn copybtn" data-copy="llmreq_'+E(id)+'">📋 복사</button>'
@@ -907,6 +1760,33 @@ _V2_OVERRIDE = r'''<script>
     parts.push('<span class="pnode goal">🏁 nonmem-ready</span>');
     return '<div class="breadcrumb'+(dotted?' dotted':'')+'">'+parts.join(arrow)+'</div>';
   }
+  /* 골격 attach → nonmem-ready 가이드 (정직한 5단계, 쉬운 말) */
+  function attachGuide(){
+    var flow=[
+      ["N0","분석 목적 정해짐?"],["N1","개체(사람/동물) 번호 만들기"],["N2","사건을 시간순으로 줄세우기"],
+      ["N3","투약 기록 완성"],["N4","관측 기록 완성"],["N5","BLQ(정량 하한 미만)·결측 처리"],
+      ["N6","공변량(체중·나이 등 부가정보) 붙이기"],["N7","남은 모호함 점검"]
+    ];
+    var chips=flow.map(function(x){
+      return '<span class="agn" data-tip="'+E(gloss("node",x[0])||"")+'"><b>'+x[0]+'</b> '+E(x[1])+'</span>';
+    }).join('<span class="agar">→</span>');
+    return '<details class="attachguide" open><summary>📍 이 진단은 어떻게 <b>🏁 nonmem-ready</b>까지 안내하나? (눌러서 펼치기/접기)</summary>'
+      +'<div class="agbody">'
+      +'<div>이 그림은 <b>‘엉망인 raw(원본) 데이터 → NONMEM 분석용 깔끔한 데이터(🏁 nonmem-ready)’</b>까지 가는 <b>지도</b>예요. 길은 이렇게 이어집니다:</div>'
+      +'<ol class="agsteps">'
+      +'<li><b>출발</b> — 내 raw 파일(보통 엉망: 여러 시트·병합 셀·BLQ 표기 등).</li>'
+      +'<li><b>표 모양 정리(필요할 때만)</b> — 깔끔한 <b>tidy 표(한 줄 = 한 측정)</b>가 아니면 먼저 모양을 정리해요 '
+      +'(검량/QA 행 제거 · 가로→세로 피벗(PIVOT=모양 바꾸기) · 시트 합치기(조인=JOIN)). '
+      +'<span class="agmanual">⚠️ 이 정리는 아직 도구가 자동으로 못 해서, 당신이나 LLM이 먼저 합니다(GAP-37).</span></li>'
+      +'<li><b>골격에 ‘붙기(attach)’</b> — tidy 표가 되면, 각 정리·검사 작업이 아래 <b>관문(N0~N7)</b> 골격의 제자리에 붙어요. '
+      +'<span class="muted">(attach=지도에서 ‘이 작업이 어느 관문에서 일어나는지’ 표시)</span></li>'
+      +'<li><b>관문을 차례로 통과 + 축(A0~A10) 평가</b>:<div class="agflow">'+chips
+      +' <span class="agar">→</span> <span class="pnode goal">🏁 nonmem-ready</span></div></li>'
+      +'<li><b>도착 또는 갈림</b> — 다 통과하면 <b>🏁 nonmem-ready</b>(L0=분석 준비 끝). 막히면 '
+      +'<span class="termstop">✋ 정당한 종료</span>(예: 표가 아니거나 파일 손상) 또는 ❓ <b>질문 Q</b>(사람이 정책을 정해야 함)로 갈려요. '
+      +'<b>어느 쪽이든 ‘다음에 뭘 할지’를 알려주니 막다른 길이 아닙니다.</b></li>'
+      +'</ol></div></details>';
+  }
   function buildWizard(){
     var mask=document.createElement("div"); mask.id="wizMask";
     var qhtml=WQ.map(function(w){
@@ -917,6 +1797,7 @@ _V2_OVERRIDE = r'''<script>
     mask.innerHTML='<div id="wizBox"><h2>🔍 내 파일 진단 — 어디서 시작할까요?'
       +'<button class="btn" id="wizClose">×</button></h2><div id="wizBody">'
       +'<div class="muted" style="font-size:12px;margin-bottom:8px">파일을 올리지 않습니다. 아래 질문에 답하면, 정본 Python 어댑터(<span class="mono">src/adapter</span>)와 <b>똑같은 규칙</b>으로 시작 지점을 알려줍니다. (1번이 ‘예’이면 2~4번은 보통 ‘아니오’ — 한 시트는 한 종류)</div>'
+      +attachGuide()
       +qhtml
       +'<div class="wizact"><button class="btn" id="wizGo" style="background:#2f6fde;color:#fff;border-color:#2f6fde;font-weight:700">진단하기</button>'
       +'<button class="btn" id="wizReset2">답 지우기</button></div><div id="wizResult"></div></div></div>';
@@ -1065,12 +1946,63 @@ _V2_OVERRIDE = r'''<script>
       +'→ <b>“🔍 내 파일 진단”</b> 버튼으로 내 파일이 어디서 시작하는지 확인하세요.';
   }
 
+  /* ===== 전체 작업 카드(122) 목록 모달 — 그래프 배선과 무관히 모든 c 열람 ===== */
+  function buildCardList(){
+    var mask=document.createElement("div"); mask.id="cardMask";
+    var ids=Object.keys(EASY).slice().sort();
+    function cinfo(id){ return CUNITS[id]||CUNITS_EXTRA[id]||{}; }
+    var order=["L-1->L-2","L-2->L-3","L-3->L-4","L-4->L-5"];
+    var byL={}; ids.forEach(function(id){ var L=cinfo(id).layer_pair||"기타"; (byL[L]=byL[L]||[]).push(id); });
+    var groups=order.concat(Object.keys(byL).filter(function(L){return order.indexOf(L)<0;}));
+    var listHtml=groups.filter(function(L){return byL[L];}).map(function(L){
+      var items=byL[L].map(function(id){ var c=cinfo(id);
+        return '<div class="clrow" data-cid="'+id+'" data-q="'+E((id+' '+(c.c_name_ko||'')+' '+(c.srp_intent||'')).toLowerCase())+'">'
+          +'<span class="clcode">'+id+'</span> '+E(c.c_name_ko||"")
+          +' <span class="clkind">'+E((gloss("kind",c.kind)||c.kind||"").split(" ")[0])+'</span></div>';
+      }).join("");
+      return '<div class="clgrp"><h4>'+E(gloss("layer",L)||L)+' <span class="muted">('+byL[L].length+')</span></h4>'+items+'</div>';
+    }).join("");
+    mask.innerHTML='<div id="cardBox"><h2>📋 작업 카드 — 전체 '+ids.length+'개 '
+      +'<span class="muted" style="font-weight:400;font-size:11px">(검색·클릭 → 쉬운 설명 + 🤖 LLM 요청문)</span>'
+      +'<button class="btn" id="cardClose">×</button></h2>'
+      +'<div id="cardWrap"><div id="cardList">'
+      +'<input id="cardSearch" placeholder="검색: 코드·이름·작업 (예: BLQ, 시간, 병합, c0011)" autocomplete="off">'
+      +'<div id="cardRows">'+listHtml+'</div></div>'
+      +'<div id="cardDetail"><div class="muted" style="padding:14px">← 왼쪽에서 작업(c)을 클릭하면 쉬운 카드가 여기 표시됩니다. (122개 전부 열람 가능)</div></div>'
+      +'</div></div>';
+    document.body.appendChild(mask);
+    mask.addEventListener("click", function(e){ if(e.target===mask) mask.classList.remove("on"); });
+    document.getElementById("cardClose").addEventListener("click", function(){ mask.classList.remove("on"); });
+    var detail=document.getElementById("cardDetail");
+    Array.prototype.forEach.call(mask.querySelectorAll(".clrow"), function(row){
+      row.addEventListener("click", function(){
+        Array.prototype.forEach.call(mask.querySelectorAll(".clrow.sel"), function(r){ r.classList.remove("sel"); });
+        row.classList.add("sel");
+        detail.innerHTML=window.renderCPanel(row.getAttribute("data-cid"));
+        detail.scrollTop=0;
+      });
+    });
+    var sb=document.getElementById("cardSearch");
+    sb.addEventListener("input", function(){
+      var q=sb.value.trim().toLowerCase();
+      Array.prototype.forEach.call(mask.querySelectorAll(".clrow"), function(r){
+        r.style.display=(!q || r.getAttribute("data-q").indexOf(q)>=0)?"":"none";
+      });
+      Array.prototype.forEach.call(mask.querySelectorAll(".clgrp"), function(g){
+        var any=Array.prototype.some.call(g.querySelectorAll(".clrow"), function(r){ return r.style.display!=="none"; });
+        g.style.display=any?"":"none";
+      });
+    });
+  }
+
   /* ===== 부팅: 모달 생성 + 버튼 연결 + 범례 갱신 + 현재 패널 v2로 다시 그리기 ===== */
   buildWizard();
   buildGloss();
+  buildCardList();
   redrawLegend();
   var wb=document.getElementById("wizardBtn"); if(wb) wb.addEventListener("click", openWiz);
   var gb=document.getElementById("glossBtn"); if(gb) gb.addEventListener("click", function(){ document.getElementById("glossMask").classList.add("on"); });
+  var cb=document.getElementById("cardBtn"); if(cb) cb.addEventListener("click", function(){ document.getElementById("cardMask").classList.add("on"); });
   /* 🤖 요청문 복사 버튼(이벤트 위임 — 패널은 매번 새로 그려지므로) */
   document.addEventListener("click", function(e){
     var btn=(e.target && e.target.closest) ? e.target.closest(".copybtn") : null;
@@ -1103,6 +2035,7 @@ def build_html() -> str:
         "<script>\n"
         "var ELES=" + B.js(B.ELES) + ";\n"
         "var CUNITS=" + B.js(B.CUNITS) + ";\n"
+        "var CUNITS_EXTRA=" + B.js(CUNITS_EXTRA) + ";\n"
         "var QINFO=" + B.js(B.QINFO) + ";\n"
         "var NODEINFO=" + B.js(B.NODEINFO) + ";\n"
         "var AXIS_STATES=" + B.js(B.AXIS_STATES) + ";\n"
