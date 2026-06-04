@@ -169,3 +169,114 @@ python3 -m pytest tests/test_phase9_adversarial.py -q   # 12 passed
 python3 -m pytest tests/ -q                        # 974 passed / 4 skipped / 1 xfailed
 ```
 신규 GAP: [[GAP-36]](issues/provenance_gaps.md) · 정산: issues/phase_settlement_checklist.md(Phase 9 행).
+
+---
+---
+
+# Phase 9 — 2nd Adversarial Cycle (skeptical, report-only) — DoD#5 critical 0 ×2 충족
+
+> 기록: 2026-06-03 (1st cycle 동일자 후속, **별개 시점·별개 공격면**). git HEAD=`d295dd7`(Direction C).
+> baseline: `python3 -m pytest tests/ -q` → **1010 passed / 4 skipped / 1 xfailed** (1004 + 6 신규 불변식).
+> **REPORT-ONLY**: engine / SSOT-data(`spec/*.json`) / `decision_tree.json` / `render/` **ZERO-diff**.
+> 변경 파일: `tests/test_phase9_adversarial.py`(+6 durable) · 본 doc · `provenance_gaps.md`(GAP-39) ·
+> `phase_settlement_checklist.md` · `bundle_feasibility_measurement.md`(§1 교정노트).
+
+## 2nd-0. 핵심 원칙 — 2nd는 1st 재탕이 아니다
+
+1st cycle(P9-1..12)은 이미 12/12 PASS·critical 0. 2nd가 같은 12를 재실행만 하면 무의미하므로,
+**1st가 검사하지 않은 새 공격면**을 골라 적대적으로 파고들었다(skeptical mode). 동시에 1st 이후 landing한
+두 커밋(`93032c7` recipe-emit · `d295dd7` Direction C)이 **1st의 전제를 깼는지** 의심했다.
+- **델타 결과:** recipe-emit + Direction C는 P9-1..12 어느 것도 깨지 않음(1010 안에 12 그대로 PASS;
+  P9-10/11/12 사실은 독립 재검증). 새 공격면 a–e 전수 검사 → **critical = 0**, 신규 non-critical 1건([[GAP-39]]).
+
+## 2nd-A. 새 공격면 검사(1st 미검사 영역, cite-verify 직접 read)
+
+| 면 | 공격면(1st 미검사) | 방법 | 결과 |
+|---|---|---|---|
+| (a) | recipe-emit 무결성(신규 모듈) | recipe_emitter.py AST·purity·dispatch 직교 | **CLEAN** — engine import 0(M2 무의존), structure 무변이, raw conc 미누출, status 일관, recipe⊥dispatch |
+| (b) | Direction C 정합(GAP-36/시제/GAP-38) | closure_proof↔live·bundle probe 재현 | **1 FINDING([[GAP-39]])** — bundles=[] 결론 옳음, measurement doc §0/§1 prose 부정확 |
+| (c) | cross-SSOT 2차(1st 12 밖) | terminal_routing·recover·q_codes 대조 | **CLEAN** — 315 reconcile·recover 14·process-fail 완전(c0210=GAP-13) |
+| (d) | banner 1차원리 심화 | 전 stats raw SSOT 재계산 | **CLEAN** — 11 stats bit-exact(P9-10 심화: stored 신뢰 제거) |
+| (e) | negative/anti-vacuous | 깨진 입력에 guard 발화 | **CLEAN** — fake c_id·제거 edge·합성 scope-out 전부 적발(non-vacuous) |
+
+### 2nd-A.1 신규 durable 불변식 (`tests/test_phase9_adversarial.py`, +6; 기존 12 불변)
+
+| ID | 면 | 불변식 | 실측 |
+|---|---|---|---|
+| P9-13 | d | decision_tree stats 전부 raw SSOT 1차원리 재계산과 bit-exact | drift 0 (pure_realized 3228·cond 52·terminal 3/315·scope_out 0/0·q 13/2/4·c_nodes 57) |
+| P9-16 | b | bundles=[] AND 완전배선 정규화-transform run 0 AND 미배선 정규화 후보 ≥1 | bundles=[]·wired-run 0·미배선-norm 후보 6 |
+| P9-17 | b | closure_proof INV ↔ live(C_used 119/C_all 122/C_dead 3)·doc 수치 명시 | 119/122·{c0042,c0043,c0333}·doc_ok |
+| P9-18 | a | recipe_emitter engine/SSOT/상대 import 0 (M2 무의존 구조 가드) | imports={pathlib,re}·coupling 0 |
+| P9-19 | a | emit_recipe structure 무변이 + raw conc 미누출 + status='described, not executed' | mutated F·leak []·status 단일 |
+| P9-20 | a+e | 깨진 입력에 guard 발화(non-vacuous) | fake_c·edge_removal·scope_out 전부 True |
+
+### 2nd-A.2 ★ 거장 결정 — test 위생: P9-14/P9-15는 durable test 아님(review doc 표)
+
+| ID | 면 | 측정(review doc 표 — _matrix [doc] 행으로 노출) | 왜 test 아님 |
+|---|---|---|---|
+| P9-14 | c | terminal_routing 3 edge strand_count(111/174/30) == strands.json 재계산 ✓; process-fail remainder(547 INVALID + 523 UNSUPPORTED) **전부 last-c=c0210**([[GAP-13]] deferred A10 경계) | **P9-13(315)에 포섭** — bit-exact 재계산이 terminal_strands 315를 이미 검증. 중복 test 불요 |
+| P9-15 | c | render recover edge **14** = \|{q ∈ exercised∪static : recover_to_c_id ∈ wired}\|; Q10→c0330 유일 omit(c0330 미배선); unreached Q 제외 | **brittle** — Q10→c0330 정당 배선 시 15로 바뀜(정당 변경에 깨짐). 표로 기록이 위생적 |
+
+## 2nd-B. ★ 신규 발견 — [[GAP-39]] (②latent, non-critical): bundle measurement prose 부정확
+
+`issues/bundle_feasibility_measurement.md` §5 probe를 frozen `strands.json`에 재실행(직접 cite-verify):
+- **후보 76개**(count는 doc와 일치). 그러나 §0/§1 prose **"전부 axis/backbone(c0200–c0213)"** 와
+  **"정규화 층 공통 부분열 0개"** 는 **falsifiable하게 부정확**:
+  - 76 中 **16개가 비-backbone** c 포함(c0251/c0252 routing; c0320–c0323, c0360–c0363 normalization).
+  - `('c0320','c0321','c0322','c0323')` freq **531** 은 L-4→L-5 정규화(ID_DTYPE/ID_LEADING_ZERO) contiguous
+    부분열 — 임계(≥500∧len≥3) 통과. doc의 "정규화층 0"과 직접 모순.
+- **그러나 `bundles=[]` 결론은 여전히 옳다(정확한 근거로):**
+  - 다발 압축은 **57-wired tree** 대상인데, 그 정규화 후보들은 **전부 미배선**(c0320–c0323 등 4개 미배선)
+    → 57-wired tree에 부재 → 압축 불가.
+  - 완전배선 후보 70개는 전부 backbone/axis/routing(c0200–c0213 + c0251/c0252, L-3→L-4) = **D-S3 압축금지**.
+  - 완전배선이며 L-4→L-5를 건드리는 유일 후보 `('c0392','c0393','c0200')` = DETECT/CLASSIFY+VERIFY(전부 비-transform).
+  - ∴ **완전배선 commutative-normalization-transform run = 0 ⟹ `bundles=[]` 정당**(P9-16 falsifiable 고정).
+- **분류:** ②latent **문서 정확성·정직성 결손**(결론 옳음·증거 서술 부정확; 5000-oracle scope를 측정했는데
+  57-wired tree gate에 적용한 scope 혼동). **non-critical**(closure 미차단·SSOT/tree 결함 0).
+- **처분(거장 Option 1):** [[GAP-39]] 신규(GAP-38 cross-ref) + P9-16 불변식 + bundle doc §1 **날짜박은
+  교정노트**(커밋된 측정 문서가 falsifiably-wrong 상태로 남지 않게 — Direction C의 closure_proof 시제정정과 동성격의
+  사실 정정, 신규 spec 아님).
+
+### benign 관찰(GAP 아님)
+- `recipe_emitter.BASELINE_STAMP` 가 "recipe-emit: working-tree (uncommitted)" 자기기술하나 현재 `93032c7`로
+  **커밋됨**(bundle/Direction-C 문서도 "미커밋"이라 적었으나 `d295dd7` 커밋됨). engine baseline `2004d27`(frozen)는
+  정확. cosmetic provenance staleness — 자기교정적·비차단. test 불요(기록만).
+
+## 2nd-C. DoD #1–#8 재평가 (1st 대비 델타)
+
+| # | 항목 | 1st | **2nd(델타)** |
+|---|---|---|---|
+| 1 | Pilot RECOMMEND | PASS | **PASS**(불변) |
+| 2 | Test green | PASS 974 | **PASS 1010**(+12 adapter/recipe +18 등, +6 본 cycle; 회귀 0) |
+| 3·C1 | c ≥1 strand or cond-incoming | BOUNDED 119/122([[GAP-36]] **미기록**) | **BOUNDED 119/122 ledger-기록**([[GAP-36]] RESOLVED; P9-17 doc↔live 재확인; 3 C_dead 미배선 = 정직 경계) |
+| 3·C2/C3/C4/C5 | edge/Q/implication/cost | PASS·BOUNDED | **불변**(P9-13이 q-partition 13/2/4·cost-파생 stats 재확인) |
+| 4·D-S3/D-S4 | 골격·conditional edge | PASS(wired) | **불변**(P9-13 conditional 52 재계산·P9-16 bundles=[] 정당화) |
+| 5 | **Adversarial critical 0 ×2** | **IN-PROGRESS 1/2** | **★ PASS 2/2** — 2nd cycle critical 0([[GAP-39]]=②latent non-critical) → DoD#5 **충족** |
+| 6 | HTML | PASS(bundle N/A) | **불변**(P9-15 recover 14·P9-13 banner stats 재확인; bundle facet N/A = GAP-39로 정당) |
+| 7 | UAT | PASS | **불변**([[GAP-35]]) |
+| 8 | [AMBIGUOUS] 0 | PASS | **불변** |
+
+**요약 델타:** #5 IN-PROGRESS→**PASS(headline)** · #3 미기록→**ledger-기록**(GAP-36 RESOLVED). 나머지 불변·재확인.
+∴ **DoD 7 PASS · 1 BOUNDED(#3, 정직 기록)**.
+
+## 2nd-D. Lock 1–7 재확인 (델타)
+
+7/7 준수 불변. 델타: **Lock 5(Convergence)** — 1st "PASS(bundle DEFER)" → 2nd "PASS, [[GAP-38]] 측정 +
+[[GAP-39]] 측정 prose 정정". `bundles=[]`는 P9-16으로 **wired scope 내 falsifiable 정당화** 확보. recipe-emit는
+adapter front-end라 Lock 1–7(엔진/spec) 무영향(P9-18/19로 engine 무결합 재확인).
+
+## 2nd-E. 결론
+
+- **새 공격면 a–e 전수 적대검사 → critical 0.** 신규 non-critical 1건([[GAP-39]], ②latent documentation honesty).
+- **DoD#5(critical 0 ×2 연속) 충족** — 1st critical 0 + 2nd critical 0. (3·#5 행 PASS로 갱신.)
+- 신규 durable 불변식 **6**(P9-13/16/17/18/19/20; 기존 12 불변 = 총 18) + review doc 표 2(P9-14/15).
+- baseline **1010 green**. engine/SSOT/decision_tree/render **ZERO-diff**(report-only 준수).
+- **다음:** A 종결 마무리 = 최종 UAT vs Definition of Done. **STOP — 자동 진행 금지.**
+
+### 부록 — 2nd cycle 재현
+```
+python3 tests/test_phase9_adversarial.py                  # P9-1..13,16..20 매트릭스 + [doc] P9-14/15
+python3 -m pytest tests/test_phase9_adversarial.py -q     # 18 passed (12 + 6)
+python3 -m pytest tests/ -q                               # 1010 passed / 4 skipped / 1 xfailed
+```
+신규 GAP: [[GAP-39]](issues/provenance_gaps.md, GAP-38 cross-ref) · bundle 교정: `issues/bundle_feasibility_measurement.md` §1.

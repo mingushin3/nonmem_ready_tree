@@ -38,6 +38,19 @@
   지금 step 2 압축을 강행하면 (a) 산출 0(정규화 후보 없음), 또는 (b) 금지된 backbone을 압축(D-S3 위반)
   — 둘 다 무익·유해. **measure-first가 "지금 다발은 무익"을 falsifiable하게 확인.**
 
+> ★ **2026-06-03 Phase 9 2nd-cycle 교정 ([[GAP-39]]):** 위 §0/§1 서술 **"전부 axis/backbone(c0200–c0213)"** ·
+> **"정규화 층 공통 부분열 0개"** 는 **부정확**하다(§5 probe를 frozen `strands.json`에 재실행해 적발).
+> 정확히는: 임계(freq≥500∧len≥3) 후보 76개 中 **16개가 비-backbone c 포함**(c0251/c0252 routing; c0320–c0323,
+> c0360–c0363 normalization). 특히 `('c0320','c0321','c0322','c0323')` freq **531** = L-4→L-5 정규화 contiguous
+> 부분열로 임계를 통과한다. **scope 혼동이 원인** — §5 probe는 **5000-oracle strand**(미배선 c 포함)를 측정하는데
+> §0/§1은 그 결과를 곧장 "**57-wired tree**의 정규화층 0"으로 일반화했다.
+> **그러나 결론 `bundles=[]`는 옳다(정밀 근거):** 다발 압축은 57-wired tree 대상인데 그 정규화 후보들은 **전부
+> 미배선**(c0320–c0323 등 4개 미배선) → tree에 부재. 완전배선 후보 70개는 backbone/axis/routing(D-S3 압축금지).
+> 완전배선이며 L-4→L-5를 건드리는 유일 후보 `('c0392','c0393','c0200')`는 DETECT/CLASSIFY+VERIFY(비-transform).
+> ∴ **완전배선 commutative-normalization-transform run = 0 ⟹ `bundles=[]` 정당(wired scope 한정).** 이 정밀
+> 정당화는 `tests/test_phase9_adversarial.py` **P9-16**으로 falsifiable 고정. (결론·`decision_tree.json` 불변;
+> 본 교정은 커밋된 측정 문서의 사실 정정 — Direction C closure_proof 시제정정과 동성격, 신규 spec 아님.)
+
 ## §2. 왜 정규화 층이 희소한가 (원인)
 
 1. **구현 범위:** 정규화(L-4→L-5) mess c는 슬라이스 1–9만 구현(나머지 고빈도 mess pair 미구현,
