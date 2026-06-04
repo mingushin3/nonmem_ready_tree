@@ -78,6 +78,15 @@ PROMPTS.md Phase 4를 batch로 수행하라. 대상: c0010..c0014 (모두 NORMAL
 
 **Phase 4의 N**: Phase 3.5의 c usage frequency 높은 순으로 진행. batch 정책으로 보통 c 수의 1/3~1/2 세션이면 끝난다.
 
+**render 산출물 2종** (표현층만 다름 — 같은 spec, 같은 엔진/SSOT):
+
+| 파일 | 생성기 | 용도 |
+|---|---|---|
+| `render/index.html` | `render/build_html.py` | **정본/전문가 뷰.** Lock 6/7 규약·코드(axis/state/Q/srp_intent) 그대로. DoD 검증 대상. |
+| `render/index_v2.html` | `render/build_html_v2.py` | **쉬운 설명 뷰(UAT 피드백 반영).** 대학 1학년 수준 풀이 + 코드 배지·hover 용어집, 색을 **진한 앰버(자동 기본 경로)+청록 점선(질문 Q 갈림길)** 으로 교체, **‘🔍 내 파일 진단’ 마법사**(src/adapter 정본 1:1 미러). |
+
+`build_html_v2.py`는 `build_html.py` 데이터층을 import해 재사용하고, 진단 마법사 판정 상수는 `src/adapter`에서 직접 import한다(drift 불가). `tests/test_render_v2.py`가 마법사 판정 == `src.adapter.ingest()` 임을 검증한다. spec/엔진/`index.html`/Lock7/CLAUDE.md는 **무변경(report-only)**.
+
 ---
 
 ## 4. 파일럿을 반드시 먼저 (왜)
